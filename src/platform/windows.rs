@@ -1,4 +1,5 @@
 use std::sync::mpsc;
+use std::sync::{Mutex, OnceLock};
 
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
@@ -49,8 +50,8 @@ pub fn output_rect(output_name: &str) -> Option<OutputRect> {
 }
 
 fn monitor_window_hooks(tx_window: mpsc::Sender<WindowInfo>) -> anyhow::Result<()> {
-    unsafe {
-        WINDOW_EVENT_TX = Some(tx_window.clone());
+    if let Ok(mut slot) = window_event_slot().lock() {
+        *slot = Some(tx_window.clone());
     }
 
     let foreground_hook = unsafe {
@@ -77,8 +78,8 @@ fn monitor_window_hooks(tx_window: mpsc::Sender<WindowInfo>) -> anyhow::Result<(
     };
 
     if foreground_hook.is_invalid() && title_hook.is_invalid() {
-        unsafe {
-            WINDOW_EVENT_TX = None;
+        if let Ok(mut slot) = window_event_slot().lock() {
+            *slot = None;
         }
         monitor_window_polling(tx_window)?;
         return Ok(());
@@ -88,23 +89,23 @@ fn monitor_window_hooks(tx_window: mpsc::Sender<WindowInfo>) -> anyhow::Result<(
     let mut msg = MSG::default();
     while unsafe { GetMessageW(&mut msg, HWND::default(), 0, 0) }.as_bool() {
         unsafe {
-            TranslateMessage(&msg);
+            let _ = TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
     }
 
     if !foreground_hook.is_invalid() {
         unsafe {
-            UnhookWinEvent(foreground_hook);
+            let _ = UnhookWinEvent(foreground_hook);
         }
     }
     if !title_hook.is_invalid() {
         unsafe {
-            UnhookWinEvent(title_hook);
+            let _ = UnhookWinEvent(title_hook);
         }
     }
-    unsafe {
-        WINDOW_EVENT_TX = None;
+    if let Ok(mut slot) = window_event_slot().lock() {
+        *slot = None;
     }
 
     Ok(())
@@ -158,7 +159,7 @@ fn monitor_lock_events(tx_lock: mpsc::Sender<LockEvent>) -> anyhow::Result<()> {
     let registered = unsafe { WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION) }.is_ok();
     if !registered {
         unsafe {
-            DestroyWindow(hwnd);
+            let _ = DestroyWindow(hwnd);
         }
         anyhow::bail!("failed to register WTS session notifications");
     }
@@ -180,14 +181,14 @@ fn monitor_lock_events(tx_lock: mpsc::Sender<LockEvent>) -> anyhow::Result<()> {
         }
 
         unsafe {
-            TranslateMessage(&msg);
+            let _ = TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
     }
 
     unsafe {
         let _ = WTSUnRegisterSessionNotification(hwnd);
-        DestroyWindow(hwnd);
+        let _ = DestroyWindow(hwnd);
     }
 
     Ok(())
@@ -339,14 +340,21 @@ unsafe extern "system" fn win_event_callback(
         return;
     }
 
-    if let Some(info) = collect_window_info(hwnd)
-        && let Some(tx) = unsafe { WINDOW_EVENT_TX.as_ref() }
-    {
-        let _ = tx.send(info);
+    if let Some(info) = collect_window_info(hwnd) {
+        let tx = window_event_slot()
+            .lock()
+            .ok()
+            .and_then(|guard| guard.as_ref().cloned());
+        if let Some(tx) = tx {
+            let _ = tx.send(info);
+        }
     }
 }
 
-static mut WINDOW_EVENT_TX: Option<mpsc::Sender<WindowInfo>> = None;
+fn window_event_slot() -> &'static Mutex<Option<mpsc::Sender<WindowInfo>>> {
+    static WINDOW_EVENT_TX: OnceLock<Mutex<Option<mpsc::Sender<WindowInfo>>>> = OnceLock::new();
+    WINDOW_EVENT_TX.get_or_init(|| Mutex::new(None))
+}
 
 #[allow(dead_code)]
 unsafe extern "system" fn passthrough_wndproc(
