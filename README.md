@@ -28,6 +28,36 @@ A config file is created automatically on first run if it does not exist.
 - Use a custom config file with `--config /path/to/config.json`.
 - Core settings include default project, DB path, reminders, report range, Jira config, and IPC endpoint override.
 
+### Config options
+
+| Key | Type | Default | Required | Description |
+|---|---|---|---|---|
+| `default_project` | `string` | `"Default"` | Yes | Fallback project name used when no rule matches. Must be non-empty. |
+| `tracking_stability_seconds` | `u64` | `60` | No | Minimum seconds before daemon auto-switches an already running tracking to a newly detected project. |
+| `working_hours` | `object` | `{}` | No | Map of weekday (`0..6`, Monday=0) to time ranges. Reminders are only due inside these ranges. |
+| `track_reminder_seconds` | `u64` | `300` | No | Delay before asking again after choosing **No** in reminder popup. |
+| `track_reminder_snooze_seconds` | `u64` | `1800` | No | Snooze duration for reminder popup and manual stop auto-tracking snooze window. |
+| `summary_update_seconds` | `u64` | `5` | No | Refresh interval for `lazytime --summary --watch`. |
+| `report_start` | `string \| null` | `null` | No | Default report start date (`YYYY-MM-DD`) when `--report` is used without `--start`. |
+| `report_end` | `string \| null` | `null` | No | Default report end date (`YYYY-MM-DD`) when `--report` is used without `--end`. |
+| `db_file` | `string` | OS-dependent data path | Yes | SQLite database file path. Parent directories are created automatically. |
+| `jira_url` | `string \| null` | `null` | No | Jira base URL (for example `https://your-company.atlassian.net`). |
+| `jira_token` | `string \| null` | `null` | No | Jira API token used for sync requests. |
+| `jira_email` | `string \| null` | `null` | No | Jira account email used with token auth. |
+| `jira_project` | `string \| null` | `null` | No | Default Jira project key for auto-created issues/worklogs. |
+| `jira_assignee` | `string \| null` | `null` | No | Default Jira assignee for created issues (account id / username, depending on Jira setup). |
+| `jira_issue_type` | `string` | `"Story"` | No | Jira issue type used when creating issues. |
+| `jira_sap_field` | `string` | `"sap_project"` | No | Jira custom field key used to store SAP/project mapping metadata. |
+| `ipc_socket_path` | `string \| null` | `null` | No | IPC endpoint override. Unix socket path when `ipc-unix`; host:port when `ipc-tcp`. |
+
+`working_hours` value format:
+
+| Field | Type | Description |
+|---|---|---|
+| `working_hours.<weekday>` | `array` | List of active time ranges for that weekday (`0=Mon ... 6=Sun`). |
+| `working_hours.<weekday>[].start` | `"HH:MM"` | Range start (24h). |
+| `working_hours.<weekday>[].end` | `"HH:MM"` | Range end (24h). |
+
 ### Config/Data locations by OS
 
 - Linux (default)
