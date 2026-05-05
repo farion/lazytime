@@ -114,7 +114,12 @@ jobs:
           $version = "${{ github.ref_name }}" -replace '^v', ''
           $content = Get-Content Cargo.toml -Raw
           $pattern = '(?ms)(^\[package\]\s*\r?\n(?:.*?\r?\n)*?^version\s*=\s*")[^"]+(")'
-          $updated = [regex]::Replace($content, $pattern, "`$1$version`$2", 1)
+          $updated = [regex]::Replace(
+            $content,
+            $pattern,
+            { param($m) $m.Groups[1].Value + $version + $m.Groups[2].Value },
+            1
+          )
           if ($updated -eq $content) {
             throw "failed to update [package].version in Cargo.toml"
           }
