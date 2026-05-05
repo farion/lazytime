@@ -1,159 +1,134 @@
 # LazyTime
 
-## What it is
+LazyTime is an automatic, rule-driven time tracking assistant. It watches your active window title/app, maps that to projects using your rules, and keeps trackings up to date.
 
-LazyTime is an automatic, rule-driven time tracking assistant that listens to window focus and title changes and starts/stops trackings accordingly. It aims to work across compositors and operating systems; the core is platform-agnostic and platform-specific integrations are implemented in gated backends.
+![LazyTime screenshot](screenshot.jpg)
 
-## Quick Start (current)
+## Quick Start (for users)
 
-Build the project:
-
-```bash
-cargo build
-```
-
-Run the daemon (Linux):
+1. Install/build `lazytime` and run it:
 
 ```bash
-./target/debug/lazytime --daemon
+lazytime
 ```
 
-Open the interactive terminal UI:
+2. By default, LazyTime starts the TUI. On TUI startup it also auto-starts the daemon (if no daemon is already running outside TUI), so it works out of the box.
 
-```bash
-./target/debug/lazytime --tui
-```
+3. Open `Current` view (`c`) to see:
+   - current active tracking,
+   - total tracked time today,
+   - daemon state (`Daemon running`, `Daemon stopped`, or `Daemon running outside TUI`).
 
-Print a single JSON object for waybar state:
-
-```bash
-./target/debug/lazytime --waybar_state
-```
-
-Other modes:
-
-- `--summary` prints a textual summary of today’s trackings (use `--watch` to refresh)
-- `--report` generates a report for a date range
-- `--jira-sync` runs scheduled Jira synchronization (if configured)
+4. Add your projects/rules in `Projects` view (`p`) so window activity can be mapped automatically.
 
 ## Configuration
 
-- Default config path: `~/.config/lazytime/config.json` (created automatically on first run if missing)
-- Default DB path: `~/.local/share/lazytime/lazytime.db` (or derived next to the config file if data dir unavailable)
-- You can override config path with `--config path/to/config.json`.
+A config file is created automatically on first run if it does not exist.
 
-## Config & Data File Locations By OS
+- Use a custom config file with `--config /path/to/config.json`.
+- Core settings include default project, DB path, reminders, report range, Jira config, and IPC endpoint override.
 
-The defaults below are used when not overridden in the config or via CLI. You can always set `ipc_socket_path` in the config to change the IPC location.
+### Config/Data locations by OS
 
-- Linux (default):
-
+- Linux (default)
   - Config: `~/.config/lazytime/config.json`
   - Data DB: `~/.local/share/lazytime/lazytime.db`
-  - IPC (unix socket, default when `ipc-unix`): `~/.local/run/lazytime.sock` or the path set in `ipc_socket_path`
+  - IPC (when `ipc-unix`): `~/.local/run/lazytime.sock` (or `ipc_socket_path` override)
 
-- macOS:
+- macOS
+  - Config: `~/Library/Application Support/lazytime/config.json` (or fallback `~/.config/lazytime/config.json`)
+  - Data DB: `~/Library/Application Support/lazytime/lazytime.db` (or fallback `~/.local/share/lazytime/lazytime.db`)
+  - IPC (recommended): TCP loopback, e.g. `127.0.0.1:43123` when `ipc-tcp` enabled
 
-  - Config: `~/Library/Application Support/lazytime/config.json` (when available) or `~/.config/lazytime/config.json`
-  - Data DB: `~/Library/Application Support/lazytime/lazytime.db` or `~/.local/share/lazytime/lazytime.db` fallback
-  - IPC (recommended on macOS): loopback TCP (e.g., `127.0.0.1:43123`) when `ipc-tcp` is enabled. If `ipc-unix` is used, a path under `/tmp` will be used.
-
-- Windows:
-  - Config: `%APPDATA%\lazytime\config.json` (e.g., `C:\Users\User\AppData\Roaming\lazytime\config.json`)
-  - Data DB: `%LOCALAPPDATA%\lazytime\lazytime.db` (e.g., `C:\Users\User\AppData\Local\lazytime\lazytime.db`)
-  - IPC: loopback TCP (recommended for cross-process on Windows) when `ipc-tcp` is enabled (e.g., `127.0.0.1:43123`). If `ipc-unix` is selected (rare on Windows), a fallback path under `%TEMP%` will be used.
+- Windows
+  - Config: `%APPDATA%\lazytime\config.json`
+  - Data DB: `%LOCALAPPDATA%\lazytime\lazytime.db`
+  - IPC (recommended): TCP loopback, e.g. `127.0.0.1:43123` when `ipc-tcp` enabled
 
 Notes:
 
-- The application will try to pick sensible OS-standard locations via the `dirs` crate. If a preferred location is not available (e.g., `dirs::data_local_dir()` returns None), LazyTime falls back to relative paths next to the config file.
-- To explicitly set the IPC endpoint, edit `ipc_socket_path` in your config or set the environment/CLI options as documented in the stories.
+- Paths come from OS-standard directories when available (`dirs` crate).
+- If `db_file` is set in config, that path is used.
+- If `ipc_socket_path` is set in config, that endpoint is used.
 
-## IPC
+## Project setup (required)
 
-LazyTime uses an IPC channel to accept runtime notifications (for example to reload project rules). On Linux it currently uses a Unix domain socket. Cross-platform support (loopback TCP) is planned as an alternate transport.
+Automatic tracking depends on project rules. First-time setup:
+
+1. Open TUI: `lazytime`
+2. Go to Projects view: `p`
+3. Add project: `a`
+4. Add one or more rules for that project (app + title regex)
+
+Rule behavior summary:
+
+- Rules map `(app_id, title regex)` to a project.
+- `app_id == "*"` means title-only fallback rule (match any app by title).
+- If no rule matches, LazyTime uses your configured default project.
+
+## How tracking works
+
+In normal usage:
+
+- The daemon listens for active-window changes and lock/unlock events.
+- On window change, LazyTime detects project from rules and starts/switches tracking.
+- On lock, active tracking is paused; on unlock, resume options are offered.
+- In Current view:
+  - `s` starts tracking manually,
+  - `d` stops current tracking.
+
+## Jira sync
+
+LazyTime can sync finished trackings to Jira.
+
+- Configure Jira fields in `config.json` (`jira_url`, token, email, project, etc.).
+- Run one-shot sync from CLI:
+
+```bash
+lazytime --jira-sync
+```
+
+- Or use TUI Jira view (`j`) for interactive sync controls/logs.
+
+## Common commands
+
+- `lazytime` -> start TUI (default)
+- `lazytime --daemon` -> daemon only
+- `lazytime --summary` -> print today summary
+- `lazytime --summary --watch` -> continuously refresh summary
+- `lazytime --report --start YYYY-MM-DD --end YYYY-MM-DD` -> report range
+- `lazytime --waybar_state` -> one JSON line for waybar
 
 ## Troubleshooting stale daemon lock
 
-LazyTime stores a daemon runtime lock in the DB (`config_store.key = "daemon_runtime_lock"`) to prevent multiple daemon instances. If a daemon crashes, this lock can remain and block start/stop operations.
+LazyTime stores a daemon runtime lock in SQLite (`config_store.key = "daemon_runtime_lock"`) to avoid duplicate daemon instances. If a daemon crashes, lock cleanup might be skipped.
 
-1. Confirm no daemon is running:
+1. Confirm no daemon process is running:
 
 ```bash
 pgrep -af "lazytime.*--daemon"
 ```
 
-2. Inspect the lock value:
+2. Inspect lock row:
 
 ```bash
 sqlite3 ~/.local/share/lazytime/lazytime.db "SELECT key, value, last_updated FROM config_store WHERE key='daemon_runtime_lock';"
 ```
 
-3. If step 1 returned nothing, remove the stale lock row:
+3. If no daemon is running, remove stale lock:
 
 ```bash
 sqlite3 ~/.local/share/lazytime/lazytime.db "DELETE FROM config_store WHERE key='daemon_runtime_lock';"
 ```
 
-4. Start daemon again (`--daemon`) or from the TUI daemon view.
+4. Start `lazytime` again.
 
-Notes:
+On Windows, run the same SQL against `%LOCALAPPDATA%\lazytime\lazytime.db` with your SQLite client.
 
-- Adjust the DB path if you set a custom `db_file` in your config.
-- On Windows, run the same SQL against your `%LOCALAPPDATA%\\lazytime\\lazytime.db` path using your preferred SQLite client.
+## For developers
 
-## Popup UI
-
-The resume/reminder popups are implemented with egui/eframe. The popup placement uses compositor-specific APIs when available to attempt output-aware placement. You can force the popup backend on Linux with `LAZYTIME_POPUP_BACKEND=wayland` or `LAZYTIME_POPUP_BACKEND=x11`.
-
-## Logging
-
-You can increase verbosity with the CLI `--loglevel` flag (e.g. `--loglevel=DEBUG`) or by setting `RUST_LOG` in your environment. The binary will respect either and configure tracing accordingly.
-
-## Platform Backends (planned & stories)
-
-The project is being refactored so all compositor/OS-specific code lives behind a small platform abstraction. The following implementation stories document the plan and details for each platform integration:
-
-- Platform abstraction and feature-gating plan: `IMPLEMENTATION_STORIES/18_platform_backends.md`
-- Linux desktop (GNOME & Plasma) backend using AT‑SPI + X11 fallback: `IMPLEMENTATION_STORIES/19_linux_desktop.md`
-- Windows backend (SetWinEventHook + WTS notifications): `IMPLEMENTATION_STORIES/20_windows_backend.md`
-- macOS backend (AXObserver + CGWindowList fallback): `IMPLEMENTATION_STORIES/21_macos_backend.md`
-
-These stories describe the decisions, APIs, feature flags, and migration checklists. They are the authoritative design notes for cross-platform support.
-
-## Rules and app_id semantics
-
-- Rules map window attributes (app_id, title regex) to projects.
-- For consistency across platforms, `app_id` semantics are:
-  - Windows: full normalized executable path (fallback to basename)
-  - macOS: prefer `CFBundleIdentifier` (fallback to executable path)
-  - Linux (AT‑SPI/X11): use toolkit/compositor-provided app id or WM_CLASS
-- Special wildcard: a stored rule with `app_id == "*"` means “match any application; apply rule by title only”. This wildcard is treated like a fallback, title-only rule on all backends.
-
-## Development & feature flags (roadmap)
-
-The repository is moving toward a small set of compile-time backend features (examples in the stories):
-
-- `backend-sway` — Sway-specific subscriber (existing implementation)
-- `backend-linux` — GNOME/Plasma desktop backend (AT‑SPI + X11 fallback)
-- `backend-windows` — Windows backend using native Win32 hooks
-- `backend-macos` — macOS backend using Accessibility APIs
-- `ipc-unix` / `ipc-tcp` — IPC transports
-- `popup-ui` — GUI popups (egui/eframe)
-
-Note: these feature names are documented in the implementation stories and will be introduced incrementally. Consult the stories for exact Cargo feature wiring and CI matrix recommendations.
-
-## Where to look next
-
-- Code: `src/daemon`, `src/rules.rs`, `src/popup.rs`, `src/ipc`
-- Stories: `IMPLEMENTATION_STORIES/*.md` (especially 18..21 for platform work)
-- Specification: `SPEC.md` for behavioral details
-
-## Contributing
-
-- Follow the incremental migration checklist in the platform stories: add small, buildable changes that keep `cargo build --no-default-features` passing.
-- Keep platform-specific dependencies contained in `src/platform/*` so the core code remains portable.
-
-Example: build core-only
+- Platform implementation stories are in `IMPLEMENTATION_STORIES/` (18+).
+- Build core-only:
 
 ```bash
 cargo build --no-default-features
