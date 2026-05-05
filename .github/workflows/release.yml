@@ -56,7 +56,20 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
-          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+          VERSION="$VERSION" python3 - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          path = pathlib.Path("Cargo.toml")
+          text = path.read_text(encoding="utf-8")
+          version = os.environ["VERSION"]
+          pattern = r'(?ms)(^\[package\]\s*\n(?:.*?\n)*?^version\s*=\s*")[^"]+(")'
+          updated, count = re.subn(pattern, rf'\1{version}\2', text, count=1)
+          if count != 1:
+              raise SystemExit("failed to update [package].version in Cargo.toml")
+          path.write_text(updated, encoding="utf-8")
+          PY
 
       - name: Build release (linux full)
         run: cargo build --release --features "backend-sway backend-linux ipc-unix popup-ui"
@@ -99,7 +112,13 @@ jobs:
         shell: powershell
         run: |
           $version = "${{ github.ref_name }}" -replace '^v', ''
-          (Get-Content Cargo.toml) -replace '^version = ".*"', "version = `"$version`"" | Set-Content Cargo.toml
+          $content = Get-Content Cargo.toml -Raw
+          $pattern = '(?ms)(^\[package\]\s*\r?\n(?:.*?\r?\n)*?^version\s*=\s*")[^"]+(")'
+          $updated = [regex]::Replace($content, $pattern, "`$1$version`$2", 1)
+          if ($updated -eq $content) {
+            throw "failed to update [package].version in Cargo.toml"
+          }
+          Set-Content Cargo.toml $updated
 
       - name: Build release (windows)
         run: cargo build --release --no-default-features --features "backend-windows ipc-tcp popup-ui"
@@ -131,7 +150,20 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
-          sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+          VERSION="$VERSION" python3 - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          path = pathlib.Path("Cargo.toml")
+          text = path.read_text(encoding="utf-8")
+          version = os.environ["VERSION"]
+          pattern = r'(?ms)(^\[package\]\s*\n(?:.*?\n)*?^version\s*=\s*")[^"]+(")'
+          updated, count = re.subn(pattern, rf'\1{version}\2', text, count=1)
+          if count != 1:
+              raise SystemExit("failed to update [package].version in Cargo.toml")
+          path.write_text(updated, encoding="utf-8")
+          PY
 
       - name: Build release (macos)
         run: cargo build --release --no-default-features --features "backend-macos ipc-tcp popup-ui"
