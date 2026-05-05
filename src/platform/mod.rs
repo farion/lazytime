@@ -35,6 +35,40 @@ use crate::popup::{
 use crate::rules::RuleCache;
 use types::{LockEvent, OutputRect, WindowInfo};
 
+#[cfg(all(feature = "backend-sway", target_os = "linux"))]
+pub fn detected_backend_name() -> &'static str {
+    if sway::is_available() {
+        "sway"
+    } else {
+        "linux-desktop"
+    }
+}
+
+#[cfg(all(not(feature = "backend-sway"), feature = "backend-linux", target_os = "linux"))]
+pub fn detected_backend_name() -> &'static str {
+    "linux-desktop"
+}
+
+#[cfg(all(feature = "backend-windows", target_os = "windows"))]
+pub fn detected_backend_name() -> &'static str {
+    "windows"
+}
+
+#[cfg(all(feature = "backend-macos", target_os = "macos"))]
+pub fn detected_backend_name() -> &'static str {
+    "macos"
+}
+
+#[cfg(not(any(
+    all(feature = "backend-sway", target_os = "linux"),
+    all(not(feature = "backend-sway"), feature = "backend-linux", target_os = "linux"),
+    all(feature = "backend-windows", target_os = "windows"),
+    all(feature = "backend-macos", target_os = "macos")
+)))]
+pub fn detected_backend_name() -> &'static str {
+    "none"
+}
+
 pub async fn run_event_loop(config: &Config, cache: RuleCache, mut state: DaemonState) -> Result<()> {
     tracing::info!("starting daemon event loop");
     #[cfg(not(feature = "popup-ui"))]

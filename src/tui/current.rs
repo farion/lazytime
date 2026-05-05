@@ -13,7 +13,6 @@ use anyhow::Result;
 
 use crate::config::Config;
 use crate::db;
-use crate::tui::daemon_control::DaemonViewStatus;
 
 const MANUAL_STOP_SNOOZE_UNTIL_KEY: &str = "autotracking_snooze_until";
 
@@ -48,7 +47,7 @@ impl CurrentState {
         frame: &mut Frame<'_>,
         area: Rect,
         conn: &rusqlite::Connection,
-        daemon_status: DaemonViewStatus,
+        quote: &str,
     ) {
         let now = Utc::now();
         let all = db::list_all_trackings(conn).unwrap_or_default();
@@ -112,7 +111,7 @@ impl CurrentState {
             &format_duration(total_today_secs),
             progress_shades(total_today_secs),
         );
-        let mut lines: Vec<Line<'static>> = Vec::new();
+        let mut lines: Vec<Line<'_>> = Vec::new();
         for row in 0..5 {
             lines.push(Line::raw(total_big[row].clone()));
         }
@@ -128,20 +127,15 @@ impl CurrentState {
             // (do not show the separator '|' or a 0:00 time)
             lines.push(Line::raw("(none)"));
         }
-        let daemon_text = match daemon_status {
-            DaemonViewStatus::Running => "Daemon running",
-            DaemonViewStatus::Stopped => "Daemon stopped",
-            DaemonViewStatus::Outside => "Daemon running outside TUI",
-        };
         lines.push(Line::raw(String::new()));
         lines.push(Line::from(Span::styled(
-            daemon_text,
+            quote,
             Style::default().fg(Color::DarkGray),
         )));
 
         let inner_h = content_area.height.saturating_sub(2) as usize;
         let top_pad = inner_h.saturating_sub(lines.len()) / 2;
-        let mut centered: Vec<Line<'static>> = Vec::new();
+        let mut centered: Vec<Line<'_>> = Vec::new();
         for _ in 0..top_pad {
             centered.push(Line::raw(String::new()));
         }
@@ -157,16 +151,6 @@ impl CurrentState {
                 .block(content_block),
             content_area,
         );
-
-        if !self.message.is_empty() {
-            let footer = Rect {
-                x: area.x,
-                y: area.y + area.height.saturating_sub(1),
-                width: area.width,
-                height: 1,
-            };
-            frame.render_widget(Paragraph::new(self.message.clone()), footer);
-        }
 
         if let Some(modal) = &self.modal {
             let mw = (area.width / 2).min(80).max(40);

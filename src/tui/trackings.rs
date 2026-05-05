@@ -315,23 +315,6 @@ impl TrackingsState {
             render_modal(frame, area, modal);
         }
 
-        if !self.message.is_empty() {
-            let footer = Rect {
-                x: area.x,
-                y: area.y + area.height.saturating_sub(1),
-                width: area.width,
-                height: 1,
-            };
-            let footer_style = if self.message.starts_with("error:") {
-                Style::default().fg(Color::Red)
-            } else {
-                Style::default()
-            };
-            frame.render_widget(
-                ratatui::widgets::Paragraph::new(self.message.clone()).style(footer_style),
-                footer,
-            );
-        }
     }
 
     pub fn handle_key(

@@ -3,6 +3,8 @@ pub mod daemon_control;
 pub mod jira_sync;
 pub mod projects;
 pub mod projects_modal;
+pub mod quotes;
+pub mod statusbar;
 pub mod trackings;
 pub mod trackings_cleanup;
 pub mod trackings_modal;
@@ -15,7 +17,7 @@ use crossterm::event::{self, Event, KeyCode};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::Paragraph;
 use std::io;
@@ -89,9 +91,12 @@ pub fn run(config: &Config) -> Result<()> {
     let mut projects_state = projects::ProjectsState::default();
     let mut jira_sync_state = jira_sync::JiraSyncState::default();
     let mut daemon_control_state = daemon_control::DaemonControlState::default();
+    let mut quote_rotator = quotes::QuoteRotator::new();
     daemon_control_state.auto_start_on_tui_launch(config)?;
 
     loop {
+        quote_rotator.refresh_if_due();
+        daemon_control_state.poll(config);
         terminal.draw(|f| {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -142,26 +147,48 @@ pub fn run(config: &Config) -> Result<()> {
             let hints_par = Paragraph::new(hints);
             f.render_widget(hints_par, hints_rect);
 
-            match mode {
+            let status_message = match mode {
                 ViewMode::Current => {
-                    daemon_control_state.poll(config);
-                    current_state.render(f, chunks[1], &conn, daemon_control_state.status);
+                    current_state.render(f, chunks[1], &conn, quote_rotator.current_quote());
+                    current_state.message.clone()
                 }
                 ViewMode::Trackings => {
                     tracking_state.render(f, chunks[1], &conn, config);
+                    tracking_state.message.clone()
                 }
                 ViewMode::Projects => {
                     projects_state.render(f, chunks[1], &conn);
+                    projects_state.message.clone()
                 }
                 ViewMode::JiraSync => {
                     jira_sync_state.poll_events();
                     jira_sync_state.render(f, chunks[1]);
+                    jira_sync_state.message.clone()
                 }
                 ViewMode::DaemonControl => {
-                    daemon_control_state.poll(config);
                     daemon_control_state.render(f, chunks[1]);
+                    daemon_control_state.message.clone()
                 }
-            }
+            };
+
+            let daemon_state = match daemon_control_state.status {
+                daemon_control::DaemonViewStatus::Outside => "outside",
+                daemon_control::DaemonViewStatus::Running => "running",
+                daemon_control::DaemonViewStatus::Stopped => "stopped",
+            };
+            let footer = Rect {
+                x: chunks[1].x,
+                y: chunks[1].y + chunks[1].height.saturating_sub(1),
+                width: chunks[1].width,
+                height: 1,
+            };
+            statusbar::render_global_statusbar(
+                f,
+                footer,
+                &status_message,
+                crate::platform::detected_backend_name(),
+                daemon_state,
+            );
         })?;
 
         if event::poll(Duration::from_millis(200))?

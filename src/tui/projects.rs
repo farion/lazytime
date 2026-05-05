@@ -333,18 +333,6 @@ impl ProjectsState {
             );
         }
 
-        if !self.message.is_empty() {
-            let footer = Rect {
-                x: area.x,
-                y: area.y + area.height.saturating_sub(1),
-                width: area.width,
-                height: 1,
-            };
-            frame.render_widget(
-                ratatui::widgets::Paragraph::new(self.message.clone()),
-                footer,
-            );
-        }
     }
 
     pub fn handle_key(&mut self, key: KeyEvent, conn: &rusqlite::Connection) -> Result<bool> {

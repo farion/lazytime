@@ -1,23 +1,22 @@
-use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
-use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MONITORINFOEXW, MonitorFromWindow,
 };
 use windows::Win32::System::RemoteDesktop::{
-    NOTIFY_FOR_THIS_SESSION, WTS_SESSION_LOCK, WTS_SESSION_UNLOCK, WTSRegisterSessionNotification,
-    WTSUnRegisterSessionNotification,
+    NOTIFY_FOR_THIS_SESSION, WTSRegisterSessionNotification, WTSUnRegisterSessionNotification,
 };
 use windows::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
+use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, EVENT_OBJECT_NAMECHANGE,
     EVENT_SYSTEM_FOREGROUND, GetClassNameW, GetForegroundWindow, GetMessageW, GetWindowTextLengthW,
-    GetWindowTextW, GetWindowThreadProcessId, HWINEVENTHOOK, MSG, SetWinEventHook,
-    TranslateMessage, UnhookWinEvent, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
-    WM_WTSSESSION_CHANGE,
+    GetWindowTextW, GetWindowThreadProcessId, HWND_MESSAGE, MSG, TranslateMessage,
+    WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_WTSSESSION_CHANGE, WTS_SESSION_LOCK,
+    WTS_SESSION_UNLOCK,
 };
 
 use super::types::{LockEvent, LockSource, OutputRect, WindowInfo};
@@ -39,7 +38,7 @@ pub fn spawn_windows_monitors(tx_lock: mpsc::Sender<LockEvent>, tx_window: mpsc:
 
 pub fn output_rect(output_name: &str) -> Option<OutputRect> {
     let hwnd = unsafe { GetForegroundWindow() };
-    if hwnd.0 == 0 {
+    if hwnd.is_invalid() {
         return None;
     }
     let (monitor_name, rect) = monitor_info(hwnd)?;
@@ -77,7 +76,7 @@ fn monitor_window_hooks(tx_window: mpsc::Sender<WindowInfo>) -> anyhow::Result<(
         )
     };
 
-    if foreground_hook.0 == 0 && title_hook.0 == 0 {
+    if foreground_hook.is_invalid() && title_hook.is_invalid() {
         unsafe {
             WINDOW_EVENT_TX = None;
         }
@@ -87,19 +86,19 @@ fn monitor_window_hooks(tx_window: mpsc::Sender<WindowInfo>) -> anyhow::Result<(
 
     tracing::info!("windows window monitor: SetWinEventHook active");
     let mut msg = MSG::default();
-    while unsafe { GetMessageW(&mut msg, HWND(0), 0, 0) }.as_bool() {
+    while unsafe { GetMessageW(&mut msg, HWND::default(), 0, 0) }.as_bool() {
         unsafe {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
     }
 
-    if foreground_hook.0 != 0 {
+    if !foreground_hook.is_invalid() {
         unsafe {
             UnhookWinEvent(foreground_hook);
         }
     }
-    if title_hook.0 != 0 {
+    if !title_hook.is_invalid() {
         unsafe {
             UnhookWinEvent(title_hook);
         }
@@ -116,7 +115,7 @@ fn monitor_window_polling(tx_window: mpsc::Sender<WindowInfo>) -> anyhow::Result
     let mut last_sig = String::new();
     loop {
         let hwnd = unsafe { GetForegroundWindow() };
-        if hwnd.0 != 0 {
+        if !hwnd.is_invalid() {
             if let Some(info) = collect_window_info(hwnd) {
                 let sig = format!(
                     "{}|{}|{}",
@@ -145,14 +144,14 @@ fn monitor_lock_events(tx_lock: mpsc::Sender<LockEvent>) -> anyhow::Result<()> {
             0,
             0,
             0,
-            HWND(-3),
+            HWND_MESSAGE,
             None,
             None,
             None,
         )
-    };
+    }?;
 
-    if hwnd.0 == 0 {
+    if hwnd.is_invalid() {
         anyhow::bail!("failed to create message-only window for WTS notifications");
     }
 
@@ -223,7 +222,10 @@ fn process_identity(hwnd: HWND) -> (u32, Option<String>) {
         return (0, None);
     }
 
-    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) };
+    let handle = match unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) } {
+        Ok(handle) if !handle.is_invalid() => handle,
+        _ => return (pid, None),
+    };
     if handle.is_invalid() {
         return (pid, None);
     }
@@ -276,7 +278,7 @@ fn class_name(hwnd: HWND) -> Option<String> {
 
 fn monitor_info(hwnd: HWND) -> Option<(String, OutputRect)> {
     let monitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
-    if monitor.0 == 0 {
+    if monitor.is_invalid() {
         return None;
     }
 
@@ -333,7 +335,7 @@ unsafe extern "system" fn win_event_callback(
     _thread_id: u32,
     _time: u32,
 ) {
-    if hwnd.0 == 0 {
+    if hwnd.is_invalid() {
         return;
     }
 
