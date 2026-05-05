@@ -112,18 +112,27 @@ jobs:
         shell: powershell
         run: |
           $version = "${{ github.ref_name }}" -replace '^v', ''
-          $content = Get-Content Cargo.toml -Raw
-          $pattern = '(?ms)(^\[package\]\s*\r?\n(?:.*?\r?\n)*?^version\s*=\s*")[^"]+(")'
-          $updated = [regex]::Replace(
-            $content,
-            $pattern,
-            { param($m) $m.Groups[1].Value + $version + $m.Groups[2].Value },
-            1
-          )
-          if ($updated -eq $content) {
+          $lines = Get-Content Cargo.toml
+          $inPackage = $false
+          $updated = $false
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^\[package\]\s*$') {
+              $inPackage = $true
+              continue
+            }
+            if ($inPackage -and $lines[$i] -match '^\[.+\]\s*$') {
+              break
+            }
+            if ($inPackage -and $lines[$i] -match '^version\s*=') {
+              $lines[$i] = "version = `"$version`""
+              $updated = $true
+              break
+            }
+          }
+          if (-not $updated) {
             throw "failed to update [package].version in Cargo.toml"
           }
-          Set-Content Cargo.toml $updated
+          Set-Content Cargo.toml $lines
 
       - name: Build release (windows)
         run: cargo build --release --no-default-features --features "backend-windows ipc-tcp popup-ui"
