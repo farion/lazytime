@@ -1,0 +1,158 @@
+name: Build and release
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  prepare_release:
+    name: Prepare GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: Automated build for tag ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
+  build-linux:
+    name: Build (linux)
+    runs-on: ubuntu-latest
+    needs: prepare_release
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libdbus-1-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            ruby \
+            ruby-dev \
+            build-essential \
+            rpm \
+            pkg-config
+
+      - name: Install fpm
+        run: sudo gem install --no-document fpm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set version from tag
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+
+      - name: Build release (linux full)
+        run: cargo build --release --features "backend-sway backend-linux ipc-unix popup-ui"
+
+      - name: Package (tar.gz)
+        run: |
+          mkdir -p dist
+          cp target/release/lazytime dist/lazytime
+          tar -C dist -czf lazytime-${{ github.ref_name }}-linux-x86_64-full.tar.gz lazytime
+
+      - name: Package (deb/rpm)
+        run: |
+          chmod +x tools/package-deb.sh tools/package-rpm.sh
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          tools/package-deb.sh target/release/lazytime "$VERSION" x86_64 full dist
+          tools/package-rpm.sh target/release/lazytime "$VERSION" x86_64 full dist
+
+      - name: Upload linux asset to GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          gh release upload "${{ github.ref_name }}" "lazytime-${{ github.ref_name }}-linux-x86_64-full.tar.gz" --clobber
+          gh release upload "${{ github.ref_name }}" "dist/lazytime-${VERSION}-linux-x86_64-full.deb" --clobber
+          gh release upload "${{ github.ref_name }}" "dist/lazytime-${VERSION}-linux-x86_64-full.rpm" --clobber
+
+  build-windows:
+    name: Build (windows)
+    runs-on: windows-latest
+    needs: prepare_release
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set version from tag
+        shell: powershell
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          (Get-Content Cargo.toml) -replace '^version = ".*"', "version = `"$version`"" | Set-Content Cargo.toml
+
+      - name: Build release (windows)
+        run: cargo build --release --no-default-features --features "backend-windows ipc-tcp popup-ui"
+
+      - name: Package (zip)
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Path dist | Out-Null
+          Copy-Item -Path target\release\lazytime.exe -Destination dist\lazytime.exe
+          Compress-Archive -Path dist\lazytime.exe -DestinationPath lazytime-${{ github.ref_name }}-windows-x86_64.zip
+
+      - name: Upload windows asset to GitHub release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" "lazytime-${{ github.ref_name }}-windows-x86_64.zip" --clobber
+
+  build-macos:
+    name: Build (macos)
+    runs-on: macos-14
+    needs: prepare_release
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set version from tag
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+
+      - name: Build release (macos)
+        run: cargo build --release --no-default-features --features "backend-macos ipc-tcp popup-ui"
+
+      - name: Package (tar.gz)
+        run: |
+          mkdir -p dist
+          cp target/release/lazytime dist/lazytime
+          tar -C dist -czf lazytime-${{ github.ref_name }}-macos-aarch64.tar.gz lazytime
+
+      - name: Package (dmg)
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          mkdir -p dist/dmg
+          cp target/release/lazytime dist/dmg/lazytime
+          hdiutil create -volname "lazytime" -srcfolder dist/dmg -ov -format UDZO "lazytime-${{ github.ref_name }}-macos-aarch64.dmg"
+
+      - name: Upload macOS asset to GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.ref_name }}" "lazytime-${{ github.ref_name }}-macos-aarch64.tar.gz" --clobber
+          gh release upload "${{ github.ref_name }}" "lazytime-${{ github.ref_name }}-macos-aarch64.dmg" --clobber
