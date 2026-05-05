@@ -65,7 +65,7 @@ jobs:
           text = path.read_text(encoding="utf-8")
           version = os.environ["VERSION"]
           pattern = r'(?ms)(^\[package\]\s*\n(?:.*?\n)*?^version\s*=\s*")[^"]+(")'
-          updated, count = re.subn(pattern, rf'\1{version}\2', text, count=1)
+          updated, count = re.subn(pattern, rf'\g<1>{version}\g<2>', text, count=1)
           if count != 1:
               raise SystemExit("failed to update [package].version in Cargo.toml")
           path.write_text(updated, encoding="utf-8")
@@ -159,7 +159,7 @@ jobs:
           text = path.read_text(encoding="utf-8")
           version = os.environ["VERSION"]
           pattern = r'(?ms)(^\[package\]\s*\n(?:.*?\n)*?^version\s*=\s*")[^"]+(")'
-          updated, count = re.subn(pattern, rf'\1{version}\2', text, count=1)
+          updated, count = re.subn(pattern, rf'\g<1>{version}\g<2>', text, count=1)
           if count != 1:
               raise SystemExit("failed to update [package].version in Cargo.toml")
           path.write_text(updated, encoding="utf-8")
