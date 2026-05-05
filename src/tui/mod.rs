@@ -178,7 +178,7 @@ pub fn run(config: &Config) -> Result<()> {
             if modal_open {
                 match mode {
                     ViewMode::Current => {
-                        let _ = current_state.handle_key(key, &mut conn)?;
+                        let _ = current_state.handle_key(key, &mut conn, config)?;
                     }
                     ViewMode::Trackings => {
                         let _ = tracking_state.handle_key(key, &conn, config)?;
@@ -216,7 +216,7 @@ pub fn run(config: &Config) -> Result<()> {
                 }
                 _ => match mode {
                     ViewMode::Current => {
-                        let _ = current_state.handle_key(key, &mut conn)?;
+                        let _ = current_state.handle_key(key, &mut conn, config)?;
                     }
                     ViewMode::Trackings => {
                         let _ = tracking_state.handle_key(key, &conn, config)?;

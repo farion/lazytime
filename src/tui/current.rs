@@ -11,8 +11,11 @@ use rusqlite::params;
 
 use anyhow::Result;
 
+use crate::config::Config;
 use crate::db;
 use crate::tui::daemon_control::DaemonViewStatus;
+
+const MANUAL_STOP_SNOOZE_UNTIL_KEY: &str = "autotracking_snooze_until";
 
 #[derive(Debug, Default, Clone)]
 pub struct CurrentState {
@@ -221,7 +224,12 @@ impl CurrentState {
         }
     }
 
-    pub fn handle_key(&mut self, key: KeyEvent, conn: &mut rusqlite::Connection) -> Result<bool> {
+    pub fn handle_key(
+        &mut self,
+        key: KeyEvent,
+        conn: &mut rusqlite::Connection,
+        config: &Config,
+    ) -> Result<bool> {
         if self.modal.is_some() {
             let modal = self.modal.take().expect("modal present");
             let (next, changed) = self.handle_modal_key(key, modal, conn)?;
@@ -240,12 +248,20 @@ impl CurrentState {
         }
 
         if matches!(key.code, KeyCode::Char('d')) {
-            let now = crate::time::format_ts(&Utc::now());
+            let now_dt = Utc::now();
+            let now = crate::time::format_ts(&now_dt);
             let changed = conn.execute(
                 "UPDATE trackings SET end_ts = ?1, updated_at = ?2 WHERE end_ts IS NULL",
                 params![now, now],
             )?;
             self.message = if changed > 0 {
+                let snooze_until = now_dt
+                    + chrono::Duration::seconds(config.track_reminder_snooze_seconds as i64);
+                db::upsert_config_key(
+                    conn,
+                    MANUAL_STOP_SNOOZE_UNTIL_KEY,
+                    &crate::time::format_ts(&snooze_until),
+                )?;
                 "tracking stopped".to_string()
             } else {
                 "no active tracking".to_string()

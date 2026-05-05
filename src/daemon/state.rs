@@ -6,6 +6,8 @@ use crate::db;
 use crate::platform::types::{WindowEventInfo, WindowInfo};
 use crate::rules::RuleCache;
 
+const MANUAL_STOP_SNOOZE_UNTIL_KEY: &str = "autotracking_snooze_until";
+
 #[derive(Debug, Clone)]
 pub struct DaemonState {
     config: Config,
@@ -59,6 +61,9 @@ impl DaemonState {
         let active = db::get_active_tracking(conn)?;
         if self.paused.is_some() {
             tracing::debug!("tracking is paused due to lock; skipping daemon auto-tracking");
+            return Ok(());
+        }
+        if active.is_none() && self.manual_stop_snooze_active(conn, now)? {
             return Ok(());
         }
         if active.is_none() && (self.reminder_popup_open || self.autotracking_suspended) {
@@ -137,6 +142,27 @@ impl DaemonState {
         }
 
         Ok(())
+    }
+
+    pub fn manual_stop_snooze_active(
+        &self,
+        conn: &rusqlite::Connection,
+        now: DateTime<Utc>,
+    ) -> Result<bool> {
+        let Some(raw_until) = db::get_config_key(conn, MANUAL_STOP_SNOOZE_UNTIL_KEY)? else {
+            return Ok(false);
+        };
+        let Ok(until) = crate::time::parse_ts(&raw_until) else {
+            return Ok(false);
+        };
+        if now < until {
+            tracing::debug!(
+                "manual stop snooze active; skipping auto-tracking until {}",
+                crate::time::format_ts_local(&until)
+            );
+            return Ok(true);
+        }
+        Ok(false)
     }
 
     pub fn reminder_due(&self, now: DateTime<Utc>) -> bool {
