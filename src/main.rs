@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use lazytime::cli::CliArgs;
-use lazytime::{config::Config, daemon, db, init_logging, jira_sync, time, tui};
+use lazytime::{config::Config, daemon, db, gui, init_logging, jira_sync, time, tui};
 use tokio::time::{Duration, sleep};
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let args = CliArgs::parse();
     // Initialize logging with optional CLI override. If --loglevel is set, export it
@@ -25,13 +25,18 @@ async fn main() -> Result<()> {
 
     let mode_selected = args.daemon
         || args.tui
+        || args.gui
         || args.summary
         || args.report
         || args.jira_sync
         || args.waybar_state;
 
-    if args.tui || !mode_selected {
+    if args.tui {
         return tui::run(&config, args.config.as_deref());
+    }
+
+    if args.gui || !mode_selected {
+        return gui::run(&config, args.config.as_deref());
     }
 
     if args.summary {

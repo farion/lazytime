@@ -6,6 +6,14 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub enum ThemePreference {
+    #[default]
+    Auto,
+    Light,
+    Dark,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TimeRange {
     pub start: String,
@@ -38,6 +46,10 @@ pub struct Config {
     #[serde(default = "default_jira_sap_field")]
     pub jira_sap_field: String,
     pub ipc_socket_path: Option<String>,
+    #[serde(default)]
+    pub theme_preference: ThemePreference,
+    #[serde(default)]
+    pub sidebar_collapsed: bool,
 }
 
 fn default_jira_issue_type() -> String {
@@ -178,6 +190,8 @@ fn default_config_template(config_path: &Path) -> Config {
         jira_issue_type: default_jira_issue_type(),
         jira_sap_field: default_jira_sap_field(),
         ipc_socket_path: None,
+        theme_preference: ThemePreference::Auto,
+        sidebar_collapsed: false,
     }
 }
 

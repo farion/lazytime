@@ -1,0 +1,5 @@
+[target.x86_64-pc-windows-gnu]
+linker = "x86_64-w64-mingw32-gcc"
+ar = "x86_64-w64-mingw32-ar"
+# Optional: make a GUI build with no console window (uncomment to enable)
+# rustflags = ["-C", "link-arg=-Wl,--subsystem,windows"]

@@ -10,6 +10,7 @@ pub mod platform;
 pub mod rules;
 pub mod time;
 pub mod tui;
+pub mod gui;
 
 pub fn init_logging() {
     // Default to INFO, but allow override via RUST_LOG or provided level from CLI

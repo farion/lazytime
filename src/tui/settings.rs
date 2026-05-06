@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::config::{Config, TimeRange};
+use crate::config::{Config, ThemePreference, TimeRange};
 
 const WEEKDAY_NAMES: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -373,6 +373,8 @@ impl SettingsState {
             jira_issue_type: self.jira_issue_type.clone(),
             jira_sap_field: self.jira_sap_field.clone(),
             ipc_socket_path: to_opt(&self.ipc_socket_path),
+            theme_preference: ThemePreference::Auto,
+            sidebar_collapsed: false,
         };
         cfg.validate().map_err(|e| e.to_string())?;
         Ok(cfg)

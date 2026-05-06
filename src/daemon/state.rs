@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::{DateTime, Datelike, Timelike, Utc};
+use chrono::{DateTime, Datelike, Local, Timelike, Utc};
 
 use crate::config::{Config, parse_hhmm};
 use crate::db;
@@ -70,6 +70,10 @@ impl DaemonState {
             tracing::debug!(
                 "autotracking suspended or reminder popup open; skipping daemon auto-start"
             );
+            return Ok(());
+        }
+        if active.is_none() && !self.within_working_hours(now) {
+            tracing::debug!("outside configured working hours; skipping daemon auto-start");
             return Ok(());
         }
         if active.is_none() {
@@ -247,12 +251,13 @@ impl DaemonState {
     }
 
     fn within_working_hours(&self, now: DateTime<Utc>) -> bool {
-        let weekday = now.weekday().num_days_from_monday() as u8;
+        let local_now = now.with_timezone(&Local);
+        let weekday = local_now.weekday().num_days_from_monday() as u8;
         let ranges = match self.config.working_hours.get(&weekday) {
             Some(v) => v,
             None => return false,
         };
-        let current_minutes = now.hour() * 60 + now.minute();
+        let current_minutes = local_now.hour() * 60 + local_now.minute();
         for range in ranges {
             let Ok((sh, sm)) = parse_hhmm(&range.start) else {
                 continue;
