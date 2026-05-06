@@ -77,7 +77,8 @@ impl CurrentView {
         let mut out = None;
 
         ui.vertical_centered(|ui| {
-            ui.add_space(24.0);
+            let top_space = (ui.available_height() - 260.0).max(0.0) * 0.5;
+            ui.add_space(top_space);
             let duration_text = format_duration(total_secs);
             let (big_lines, big_masks) = render_big_duration_lines(&duration_text);
             let bg_color = ui.visuals().window_fill;
