@@ -14,7 +14,7 @@ pub mod trackings_storno;
 pub mod settings;
 
 use anyhow::Result;
-use crossterm::event::{self, Event, KeyCode};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -200,6 +200,10 @@ pub fn run(config: &Config, config_path: Option<&str>) -> Result<()> {
         if event::poll(Duration::from_millis(200))?
             && let Event::Key(key) = event::read()?
         {
+            if key.kind != KeyEventKind::Press {
+                continue;
+            }
+
             let modal_open = match mode {
                 ViewMode::Current => current_state.modal.is_some(),
                 ViewMode::Trackings => tracking_state.modal.is_some(),
