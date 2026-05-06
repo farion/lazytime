@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
         || args.waybar_state;
 
     if args.tui || !mode_selected {
-        return tui::run(&config);
+        return tui::run(&config, args.config.as_deref());
     }
 
     if args.summary {

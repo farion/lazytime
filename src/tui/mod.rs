@@ -11,6 +11,7 @@ pub mod trackings_modal;
 pub mod trackings_modal_actions;
 pub mod trackings_rows;
 pub mod trackings_storno;
+pub mod settings;
 
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode};
@@ -72,7 +73,7 @@ pub(crate) fn scroll_offset_for_selection(
     next_offset
 }
 
-pub fn run(config: &Config) -> Result<()> {
+pub fn run(config: &Config, config_path: Option<&str>) -> Result<()> {
     let mut conn = db::open(config.db_path())?;
     db::migrate(&conn)?;
 
@@ -91,6 +92,7 @@ pub fn run(config: &Config) -> Result<()> {
     let mut projects_state = projects::ProjectsState::default();
     let mut jira_sync_state = jira_sync::JiraSyncState::default();
     let mut daemon_control_state = daemon_control::DaemonControlState::default();
+    let mut settings_state = settings::SettingsState::new_from_config(config);
     let mut quote_rotator = quotes::QuoteRotator::new();
     daemon_control_state.auto_start_on_tui_launch(config)?;
 
@@ -106,7 +108,7 @@ pub fn run(config: &Config) -> Result<()> {
             // Render exactly three lines: one blank line, the title line, one blank line.
             // Title has 1-space padding left and right as requested.
             let left = " LazyTime TUI";
-            let hints = "c=current | t=trackings | p=projects | j=jira | o=daemon | q=quit";
+            let hints = "c=current | t=trackings | p=projects | j=jira | o=daemon | x=settings | q=quit";
             let inner_width = chunks[0].width.saturating_sub(2) as usize; // allow for minimal padding
             let left_len = left.chars().count();
             let hints_len = hints.chars().count();
@@ -169,6 +171,10 @@ pub fn run(config: &Config) -> Result<()> {
                     daemon_control_state.render(f, chunks[1]);
                     daemon_control_state.message.clone()
                 }
+                ViewMode::Settings => {
+                    settings_state.render(f, chunks[1]);
+                    settings_state.message.clone()
+                }
             };
 
             let daemon_state = match daemon_control_state.status {
@@ -200,6 +206,7 @@ pub fn run(config: &Config) -> Result<()> {
                 ViewMode::Projects => projects_state.modal.is_some(),
                 ViewMode::JiraSync => false,
                 ViewMode::DaemonControl => false,
+                ViewMode::Settings => settings_state.modal.is_some(),
             };
 
             if modal_open {
@@ -224,6 +231,9 @@ pub fn run(config: &Config) -> Result<()> {
                     ViewMode::DaemonControl => {
                         let _ = daemon_control_state.handle_key(key, config)?;
                     }
+                    ViewMode::Settings => {
+                        let _ = settings_state.handle_key(key, &conn, config_path)?;
+                    }
                 }
                 continue;
             }
@@ -238,8 +248,18 @@ pub fn run(config: &Config) -> Result<()> {
                 KeyCode::Char('p') => mode = ViewMode::Projects,
                 KeyCode::Char('j') => mode = ViewMode::JiraSync,
                 KeyCode::Char('o') => mode = ViewMode::DaemonControl,
+                KeyCode::Char('x') => mode = ViewMode::Settings,
                 KeyCode::Char('r') => {
-                    let _ = db::migrate(&conn);
+                    if !matches!(mode, ViewMode::Settings) {
+                        let _ = db::migrate(&conn);
+                    } else {
+                        let changed = settings_state.handle_key(key, &conn, config_path)?;
+                        if changed {
+                            let ts = crate::time::format_ts(&chrono::Utc::now());
+                            let socket = config.ipc_socket_path();
+                            client::notify_projects_updated_blocking(&socket, &ts).ok();
+                        }
+                    }
                 }
                 _ => match mode {
                     ViewMode::Current => {
@@ -262,6 +282,14 @@ pub fn run(config: &Config) -> Result<()> {
                     ViewMode::DaemonControl => {
                         let _ = daemon_control_state.handle_key(key, config)?;
                     }
+                    ViewMode::Settings => {
+                        let changed = settings_state.handle_key(key, &conn, config_path)?;
+                        if changed {
+                            let ts = crate::time::format_ts(&chrono::Utc::now());
+                            let socket = config.ipc_socket_path();
+                            client::notify_projects_updated_blocking(&socket, &ts).ok();
+                        }
+                    }
                 },
             }
         }
@@ -283,6 +311,7 @@ enum ViewMode {
     Projects,
     JiraSync,
     DaemonControl,
+    Settings,
 }
 
 #[cfg(test)]
