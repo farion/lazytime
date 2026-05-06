@@ -43,11 +43,17 @@ ipc-tcp = []
 popup-ui = ["dep:eframe", "dep:winit"]
 popup-output-placement = []
 
-[dependencies.eframe]
+[target.'cfg(target_os = "linux")'.dependencies.eframe]
 version = "0.33"
 optional = true
 default-features = false
 features = ["wayland", "x11", "default_fonts", "glow"]
+
+[target.'cfg(target_os = "windows")'.dependencies.eframe]
+version = "0.33"
+optional = true
+default-features = false
+features = ["default_fonts", "glow"]
 
 [dev-dependencies]
 tempfile = "3.18"

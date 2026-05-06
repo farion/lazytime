@@ -84,7 +84,7 @@ impl DaemonControlState {
 
     pub fn poll(&mut self, config: &Config) {
         self.poll_events();
-        self.poll_child_exit();
+        self.poll_child_exit(config);
         self.refresh_status_from_lock(config);
     }
 
@@ -286,19 +286,7 @@ impl DaemonControlState {
     pub fn stop_owned_on_exit(&mut self, config: &Config) {
         let _ = self.stop_daemon(config);
 
-        let lock_owner = db::open(config.db_path())
-            .ok()
-            .and_then(|conn| db::get_config_key(&conn, DAEMON_RUNTIME_LOCK_KEY).ok().flatten());
-        if let Some(owner) = lock_owner {
-            let parsed = parse_lock_owner(&owner);
-            let owned_by_tui = parsed.token.as_deref() == Some(self.owner_id.as_str()) || owner == self.owner_id;
-            if owned_by_tui {
-                if let Some(pid) = parsed.pid {
-                    let _ = stop_process_by_pid(pid);
-                }
-                let _ = release_owned_lock(config, &owner);
-            }
-        }
+        self.cleanup_owned_lock(config, true);
     }
 
     fn start_daemon(&mut self, config: &Config) -> Result<()> {
@@ -366,19 +354,7 @@ impl DaemonControlState {
             let _ = child.wait();
         }
 
-        let lock_owner = db::open(config.db_path())
-            .ok()
-            .and_then(|conn| db::get_config_key(&conn, DAEMON_RUNTIME_LOCK_KEY).ok().flatten());
-        if let Some(owner) = lock_owner {
-            let parsed = parse_lock_owner(&owner);
-            let owned_by_tui = parsed.token.as_deref() == Some(self.owner_id.as_str()) || owner == self.owner_id;
-            if owned_by_tui {
-                if let Some(pid) = parsed.pid {
-                    let _ = stop_process_by_pid(pid);
-                }
-                let _ = release_owned_lock(config, &owner);
-            }
-        }
+        self.cleanup_owned_lock(config, true);
 
         self.receiver = None;
         self.status = DaemonViewStatus::Stopped;
@@ -419,13 +395,17 @@ impl DaemonControlState {
         }
     }
 
-    fn poll_child_exit(&mut self) {
+    fn poll_child_exit(&mut self, config: &Config) {
         let Some(child) = self.child.as_mut() else {
             return;
         };
         match child.try_wait() {
             Ok(Some(status)) => {
                 self.push_log(format!("daemon exited: {status}"));
+                if !status.success() {
+                    self.push_log("daemon exited with failure; clearing sqlite lock".to_string());
+                }
+                self.cleanup_owned_lock(config, false);
                 self.status = DaemonViewStatus::Stopped;
                 self.child = None;
                 self.message = "daemon stopped".to_string();
@@ -433,9 +413,29 @@ impl DaemonControlState {
             Ok(None) => {}
             Err(err) => {
                 self.push_log(format!("failed to poll daemon process: {err}"));
+                self.cleanup_owned_lock(config, false);
                 self.status = DaemonViewStatus::Stopped;
                 self.child = None;
                 self.message = "daemon stopped".to_string();
+            }
+        }
+    }
+
+    fn cleanup_owned_lock(&mut self, config: &Config, stop_pid: bool) {
+        let lock_owner = db::open(config.db_path())
+            .ok()
+            .and_then(|conn| db::get_config_key(&conn, DAEMON_RUNTIME_LOCK_KEY).ok().flatten());
+        if let Some(owner) = lock_owner {
+            let parsed = parse_lock_owner(&owner);
+            let owned_by_tui =
+                parsed.token.as_deref() == Some(self.owner_id.as_str()) || owner == self.owner_id;
+            if owned_by_tui {
+                if stop_pid {
+                    if let Some(pid) = parsed.pid {
+                        let _ = stop_process_by_pid(pid);
+                    }
+                }
+                let _ = release_owned_lock(config, &owner);
             }
         }
     }

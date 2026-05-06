@@ -217,7 +217,7 @@ impl ProjectsState {
             title_line.push(' ');
             let title_block = Block::default()
                 .borders(Borders::ALL)
-                .padding(Padding::horizontal(1));
+                .padding(Padding::horizontal(0));
             frame.render_widget(
                 ratatui::widgets::Paragraph::new(title_line).block(title_block),
                 Rect {
@@ -555,7 +555,7 @@ impl ProjectsState {
                     if m.field_idx == 2 {
                         if m.name.trim().is_empty() {
                             self.message = "project name must not be empty".to_string();
-                            return Ok((Some(modal), true));
+                            return Ok((Some(modal), false));
                         }
                         let sap = if m.sap.trim().is_empty() {
                             None
@@ -579,13 +579,13 @@ impl ProjectsState {
                     }
                     if m.field_idx == 3 {
                         self.message = "cancelled".to_string();
-                        return Ok((None, true));
+                        return Ok((None, false));
                     }
                     return Ok((Some(modal), false));
                 }
                 KeyCode::Esc => {
                     self.message = "cancelled".to_string();
-                    return Ok((None, true));
+                    return Ok((None, false));
                 }
                 _ => return Ok((Some(modal), false)),
             },
@@ -661,13 +661,13 @@ impl ProjectsState {
                     }
                     if m.field_idx == 4 {
                         self.message = "cancelled".to_string();
-                        return Ok((None, true));
+                        return Ok((None, false));
                     }
                     return Ok((Some(modal), false));
                 }
                 KeyCode::Esc => {
                     self.message = "cancelled".to_string();
-                    return Ok((None, true));
+                    return Ok((None, false));
                 }
                 _ => return Ok((Some(modal), false)),
             },
@@ -694,12 +694,12 @@ impl ProjectsState {
                         Ok((None, true))
                     } else {
                         self.message = "cancelled".to_string();
-                        Ok((None, true))
+                        Ok((None, false))
                     }
                 }
                 KeyCode::Esc => {
                     self.message = "cancelled".to_string();
-                    Ok((None, true))
+                    Ok((None, false))
                 }
                 _ => Ok((Some(modal), false)),
             },
