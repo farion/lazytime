@@ -106,7 +106,10 @@ impl TrackingsView {
                 self.selected = 0;
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let gap_changed = ui.checkbox(&mut self.show_gaps, "Show Gaps").changed();
+                let gap_changed = ui
+                    .checkbox(&mut self.show_gaps, "Show Gaps")
+                    .on_hover_text("Show not tracked ranges during the working hours.")
+                    .changed();
                 if gap_changed {
                     message = Some(if self.show_gaps {
                         "gaps shown".to_string()
@@ -116,7 +119,9 @@ impl TrackingsView {
                 }
                 if ui
                     .button(style::icon_label(ui, icons::BROOM, ""))
-                    .on_hover_text("Cleanup")
+                    .on_hover_text(
+                        "Cleanup. Merge multiple following trackings for the same project.",
+                    )
                     .clicked()
                     && let Ok(stats) = cleanup_today_unsynced_trackings(&conn, config)
                 {
