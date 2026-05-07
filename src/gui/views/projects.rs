@@ -62,48 +62,53 @@ impl ProjectsView {
         self.handle_keys(ctx, &projects, &conn);
 
         ui.horizontal(|ui| {
-            if ui
-                .button(style::icon_label(ui, icons::PLUS, "Add"))
-                .clicked()
-            {
-                self.project_modal = Some(ProjectForm::default());
-            }
-            if ui
-                .add_enabled(
-                    has_projects,
-                    egui::Button::new(style::icon_label(ui, icons::PENCIL_SIMPLE, "Edit")),
-                )
-                .clicked()
-            {
-                if let Some(p) = projects.get(self.selected_project) {
+            ui.label(egui::RichText::new("Projects").size(18.0).strong());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .add_enabled(
+                        has_projects,
+                        egui::Button::new(style::icon_label(ui, icons::LIST_BULLETS, "")),
+                    )
+                    .on_hover_text("Rules")
+                    .clicked()
+                {
+                    self.rules_modal_open = true;
+                    self.selected_rule = 0;
+                }
+                if ui
+                    .add_enabled(
+                        has_projects,
+                        egui::Button::new(style::icon_label(ui, icons::TRASH_SIMPLE, "")),
+                    )
+                    .on_hover_text("Delete")
+                    .clicked()
+                    && let Some(p) = projects.get(self.selected_project)
+                {
+                    self.confirm_modal = Some(ConfirmAction::DeleteProject(p.id));
+                }
+                if ui
+                    .add_enabled(
+                        has_projects,
+                        egui::Button::new(style::icon_label(ui, icons::PENCIL_SIMPLE, "")),
+                    )
+                    .on_hover_text("Edit")
+                    .clicked()
+                    && let Some(p) = projects.get(self.selected_project)
+                {
                     self.project_modal = Some(ProjectForm {
                         id: Some(p.id),
                         name: p.name.clone(),
                         sap: p.sap_number.clone().unwrap_or_default(),
                     });
                 }
-            }
-            if ui
-                .add_enabled(
-                    has_projects,
-                    egui::Button::new(style::icon_label(ui, icons::TRASH_SIMPLE, "Delete")),
-                )
-                .clicked()
-            {
-                if let Some(p) = projects.get(self.selected_project) {
-                    self.confirm_modal = Some(ConfirmAction::DeleteProject(p.id));
+                if ui
+                    .button(style::icon_label(ui, icons::PLUS, ""))
+                    .on_hover_text("Add")
+                    .clicked()
+                {
+                    self.project_modal = Some(ProjectForm::default());
                 }
-            }
-            if ui
-                .add_enabled(
-                    has_projects,
-                    egui::Button::new(style::icon_label(ui, icons::LIST_BULLETS, "Rules")),
-                )
-                .clicked()
-            {
-                self.rules_modal_open = true;
-                self.selected_rule = 0;
-            }
+            });
         });
 
         let rows: Vec<Vec<String>> = projects
@@ -116,7 +121,8 @@ impl ProjectsView {
             &["Project", "SAP Number"],
             &rows,
             Some(self.selected_project),
-            true,
+            Some(table::ContextMenuConfig::default()),
+            None,
             None,
         ) {
             match action {
@@ -148,6 +154,7 @@ impl ProjectsView {
                         message = Some("row copied".to_string());
                     }
                 }
+                RowAction::Storno(_) => {}
             }
         }
 
@@ -521,7 +528,8 @@ impl ProjectsView {
                     &["app_id", "name_regex", "prec"],
                     &rows,
                     Some(self.selected_rule),
-                    true,
+                    Some(table::ContextMenuConfig::default()),
+                    None,
                     None,
                 )
             })
@@ -561,6 +569,7 @@ impl ProjectsView {
                         *message = Some("row copied".to_string());
                     }
                 }
+                RowAction::Storno(_) => {}
             }
         }
     }

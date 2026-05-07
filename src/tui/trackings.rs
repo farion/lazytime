@@ -461,7 +461,8 @@ impl TrackingsState {
                 if let Some(DisplayRow::Gap(g)) = rows.get(self.selected) {
                     modal.start = format_storage_ts_for_tui(&g.start_ts);
                     modal.end = format_storage_ts_for_tui(&g.end_ts);
-                    modal.selected_project = projects.iter().position(|p| p == &g.after_project);
+                    modal.selected_project =
+                        projects.iter().position(|p| p == &g.previous_project);
                 }
                 self.modal = Some(TrackingsModal::Tracking(modal));
                 return Ok(true);

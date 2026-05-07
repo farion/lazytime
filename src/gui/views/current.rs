@@ -10,6 +10,7 @@ use crate::tui::quotes::QuoteRotator;
 use super::super::style;
 
 const MANUAL_STOP_SNOOZE_UNTIL_KEY: &str = "autotracking_snooze_until";
+const AUTOTRACKING_SUSPENDED_UNTIL_KEY: &str = "autotracking_suspended_until";
 
 pub struct CurrentView {
     start_modal_open: bool,
@@ -50,6 +51,24 @@ impl CurrentView {
         };
         if db::release_lock(&conn, MANUAL_STOP_SNOOZE_UNTIL_KEY).is_ok() {
             Some("autotracking unsnoozed".to_string())
+        } else {
+            None
+        }
+    }
+
+    pub fn autotrack_is_suspended(&self, config: &Config) -> bool {
+        let Ok(conn) = db::open(config.db_path()) else {
+            return false;
+        };
+        reminder_suspension_until(&conn).is_some_and(|until| Utc::now() < until)
+    }
+
+    pub fn unsuspend_autotracking(&self, config: &Config) -> Option<String> {
+        let Ok(conn) = db::open(config.db_path()) else {
+            return None;
+        };
+        if db::release_lock(&conn, AUTOTRACKING_SUSPENDED_UNTIL_KEY).is_ok() {
+            Some("autotracking unsuspended".to_string())
         } else {
             None
         }
@@ -349,6 +368,15 @@ fn tracking_strategy_sentence(
         );
     }
 
+    if let Some(until) = reminder_suspension_until(conn)
+        && now < until
+    {
+        return format!(
+            "autotracking suspended until {}",
+            human_datetime(until.with_timezone(&Local))
+        );
+    }
+
     let (inside_hours, next_start) = working_hours_state(config, now.with_timezone(&Local));
     if !inside_hours {
         return if let Some(next) = next_start {
@@ -370,6 +398,13 @@ fn human_datetime(dt: DateTime<Local>) -> String {
 
 fn manual_stop_snooze_until(conn: &rusqlite::Connection) -> Option<DateTime<Utc>> {
     db::get_config_key(conn, MANUAL_STOP_SNOOZE_UNTIL_KEY)
+        .ok()
+        .flatten()
+        .and_then(|raw| crate::time::parse_ts(&raw).ok())
+}
+
+fn reminder_suspension_until(conn: &rusqlite::Connection) -> Option<DateTime<Utc>> {
+    db::get_config_key(conn, AUTOTRACKING_SUSPENDED_UNTIL_KEY)
         .ok()
         .flatten()
         .and_then(|raw| crate::time::parse_ts(&raw).ok())

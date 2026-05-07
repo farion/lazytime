@@ -339,11 +339,18 @@ impl eframe::App for GuiApp {
             let daemon_state = self.daemon.status_text(&self.config);
             let autotrack_status = self.current.autotrack_status_sentence(&self.config);
             let autotrack_snoozed = self.current.autotrack_is_snoozed(&self.config);
+            let autotrack_suspended = self.current.autotrack_is_suspended(&self.config);
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(autotrack_status).weak());
                 if autotrack_snoozed
                     && ui.small_button("Unsnooze").clicked()
                     && let Some(msg) = self.current.unsnooze_autotracking(&self.config)
+                {
+                    self.push_toast(msg);
+                }
+                if autotrack_suspended
+                    && ui.small_button("Unsuspend").clicked()
+                    && let Some(msg) = self.current.unsuspend_autotracking(&self.config)
                 {
                     self.push_toast(msg);
                 }

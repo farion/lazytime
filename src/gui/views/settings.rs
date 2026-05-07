@@ -95,54 +95,59 @@ impl SettingsView {
         }
 
         ui.horizontal(|ui| {
-            if ui
-                .add_enabled(
-                    has_changes,
-                    egui::Button::new(style::icon_label(ui, icons::FLOPPY_DISK, "Save")),
-                )
-                .clicked()
-                || (has_changes && ctx.input(|i| i.key_pressed(egui::Key::S)))
-            {
-                match self.edit.to_config(
-                    config,
-                    self.theme_preference.clone(),
-                    self.sidebar_collapsed,
-                ) {
-                    Ok(next) => {
-                        let p = resolve_config_path(config_path);
-                        if let Some(parent) = p.parent() {
-                            let _ = fs::create_dir_all(parent);
-                        }
-                        match serde_json::to_string_pretty(&next) {
-                            Ok(json) => {
-                                if fs::write(&p, json).is_ok() {
-                                    *config = next;
-                                    self.pref_changed = true;
-                                    message = Some(format!("saved {}", p.display()));
-                                } else {
-                                    message =
-                                        Some(format!("error: failed to write {}", p.display()));
-                                }
-                            }
-                            Err(err) => message = Some(format!("error: {err}")),
-                        }
-                    }
-                    Err(err) => message = Some(err),
+            ui.label(egui::RichText::new("Settings").size(18.0).strong());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .add_enabled(
+                        has_changes,
+                        egui::Button::new(style::icon_label(ui, icons::X, "")),
+                    )
+                    .on_hover_text("Reset")
+                    .clicked()
+                {
+                    self.edit = SettingsEdit::from_config(config);
+                    self.theme_preference = config.theme_preference.clone();
+                    self.sidebar_collapsed = config.sidebar_collapsed;
+                    self.pref_changed = true;
+                    message = Some("form reset".to_string());
                 }
-            }
-            if ui
-                .add_enabled(
-                    has_changes,
-                    egui::Button::new(style::icon_label(ui, icons::X, "Reset")),
-                )
-                .clicked()
-            {
-                self.edit = SettingsEdit::from_config(config);
-                self.theme_preference = config.theme_preference.clone();
-                self.sidebar_collapsed = config.sidebar_collapsed;
-                self.pref_changed = true;
-                message = Some("form reset".to_string());
-            }
+                if ui
+                    .add_enabled(
+                        has_changes,
+                        egui::Button::new(style::icon_label(ui, icons::FLOPPY_DISK, "")),
+                    )
+                    .on_hover_text("Save")
+                    .clicked()
+                    || (has_changes && ctx.input(|i| i.key_pressed(egui::Key::S)))
+                {
+                    match self.edit.to_config(
+                        config,
+                        self.theme_preference.clone(),
+                        self.sidebar_collapsed,
+                    ) {
+                        Ok(next) => {
+                            let p = resolve_config_path(config_path);
+                            if let Some(parent) = p.parent() {
+                                let _ = fs::create_dir_all(parent);
+                            }
+                            match serde_json::to_string_pretty(&next) {
+                                Ok(json) => {
+                                    if fs::write(&p, json).is_ok() {
+                                        *config = next;
+                                        self.pref_changed = true;
+                                        message = Some(format!("saved {}", p.display()));
+                                    } else {
+                                        message =
+                                            Some(format!("error: failed to write {}", p.display()));
+                                    }
+                                }
+                                Err(err) => message = Some(format!("error: {err}")),
+                            }
+                        }
+                        Err(err) => message = Some(err),
+                    }
+                }
+            });
         });
 
         ui.set_min_width(ui.available_width());

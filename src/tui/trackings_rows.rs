@@ -15,7 +15,7 @@ pub enum DisplayRow {
 pub struct GapRow {
     pub start_ts: String,
     pub end_ts: String,
-    pub after_project: String,
+    pub previous_project: String,
 }
 
 pub fn display_rows(
@@ -120,7 +120,7 @@ fn build_gap_row(prev: &db::Tracking, next: &db::Tracking, config: &Config) -> O
     Some(GapRow {
         start_ts: crate::time::format_ts(&prev_end_dt),
         end_ts: crate::time::format_ts(&next_start_dt),
-        after_project: next.project_name.clone(),
+        previous_project: prev.project_name.clone(),
     })
 }
 

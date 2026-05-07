@@ -10,7 +10,7 @@ use crate::tui::trackings_rows::{DisplayRow, display_rows, extract_date};
 use crate::tui::trackings_storno::storno_tracking;
 
 use super::super::style;
-use super::super::table::{self, RowAction};
+use super::super::table::{self, ContextMenuConfig, ContextMenuState, RowAction};
 
 const DIALOG_LABEL_WIDTH: f32 = 110.0;
 const DATE_FIELD_WIDTH: f32 = 124.0;
@@ -75,62 +75,51 @@ impl TrackingsView {
         let selected_tracking = matches!(rows.get(self.selected), Some(DisplayRow::Tracking(_)));
         let selected_tracking_unsynced = selected_tracking && !self.selected_tracking_synced(&rows);
 
+        let filter_label = if self.filter_start == self.filter_end {
+            self.filter_start.clone()
+        } else {
+            format!("{}..{}", self.filter_start, self.filter_end)
+        };
         ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Trackings").size(18.0).strong());
             if ui
-                .button(style::icon_label(ui, icons::PLUS, "Add"))
+                .button(style::icon_label(ui, icons::ARROW_LEFT, ""))
+                .on_hover_text("Previous range")
                 .clicked()
             {
-                self.edit_modal = Some(self.new_form(&conn, None));
+                shift_filter_window(&mut self.filter_start, &mut self.filter_end, false);
+                self.selected = 0;
             }
             if ui
-                .add_enabled(
-                    selected_tracking_unsynced,
-                    egui::Button::new(style::icon_label(ui, icons::PENCIL_SIMPLE, "Edit")),
-                )
-                .clicked()
-            {
-                if let Some(form) = self.form_from_selected(&rows, &conn) {
-                    self.edit_modal = Some(form);
-                } else {
-                    message = Some("readonly: synced tracking cannot be changed".to_string());
-                }
-            }
-            if ui
-                .add_enabled(
-                    selected_tracking_unsynced,
-                    egui::Button::new(style::icon_label(ui, icons::TRASH_SIMPLE, "Delete")),
-                )
-                .clicked()
-                && let Some(id) = self.selected_tracking_id(&rows)
-            {
-                if self.selected_tracking_synced(&rows) {
-                    message = Some("readonly: synced tracking cannot be changed".to_string());
-                } else {
-                    self.confirm_delete_id = Some(id);
-                }
-            }
-            if ui
-                .button(style::icon_label(ui, icons::SLIDERS, "Filter"))
+                .button(style::icon_label(ui, icons::SLIDERS, &filter_label))
+                .on_hover_text("Filter range")
                 .clicked()
             {
                 self.filter_modal = true;
             }
             if ui
-                .button(style::icon_label(ui, icons::RECTANGLE_DASHED, "Gaps"))
+                .button(style::icon_label(ui, icons::ARROW_RIGHT, ""))
+                .on_hover_text("Next range")
                 .clicked()
             {
-                self.show_gaps = !self.show_gaps;
-                message = Some(if self.show_gaps {
-                    "gaps shown".to_string()
-                } else {
-                    "gaps hidden".to_string()
-                });
+                shift_filter_window(&mut self.filter_start, &mut self.filter_end, true);
+                self.selected = 0;
             }
-            if ui
-                .button(style::icon_label(ui, icons::BROOM, "Cleanup"))
-                .clicked()
-            {
-                if let Ok(stats) = cleanup_today_unsynced_trackings(&conn, config) {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let gap_changed = ui.checkbox(&mut self.show_gaps, "Show Gaps").changed();
+                if gap_changed {
+                    message = Some(if self.show_gaps {
+                        "gaps shown".to_string()
+                    } else {
+                        "gaps hidden".to_string()
+                    });
+                }
+                if ui
+                    .button(style::icon_label(ui, icons::BROOM, ""))
+                    .on_hover_text("Cleanup")
+                    .clicked()
+                    && let Ok(stats) = cleanup_today_unsynced_trackings(&conn, config)
+                {
                     message = Some(if stats.removed_rows == 0 {
                         "cleanup: nothing to merge".to_string()
                     } else {
@@ -140,20 +129,58 @@ impl TrackingsView {
                         )
                     });
                 }
-            }
-            if ui
-                .add_enabled(
-                    selected_tracking,
-                    egui::Button::new(style::icon_label(ui, icons::ARROW_U_DOWN_LEFT, "Storno")),
-                )
-                .clicked()
-                && let Some(DisplayRow::Tracking(t)) = rows.get(self.selected)
-            {
-                message = Some(match storno_tracking(&conn, config, t) {
-                    Ok(msg) => msg,
-                    Err(err) => format!("error: {err}"),
-                });
-            }
+                ui.separator();
+                if ui
+                    .add_enabled(
+                        selected_tracking_unsynced,
+                        egui::Button::new(style::icon_label(ui, icons::ARROW_U_DOWN_LEFT, "")),
+                    )
+                    .on_hover_text("Storno in Jira")
+                    .clicked()
+                    && let Some(DisplayRow::Tracking(t)) = rows.get(self.selected)
+                {
+                    message = Some(match storno_tracking(&conn, config, t) {
+                        Ok(msg) => msg,
+                        Err(err) => format!("error: {err}"),
+                    });
+                }
+                if ui
+                    .add_enabled(
+                        selected_tracking_unsynced,
+                        egui::Button::new(style::icon_label(ui, icons::TRASH_SIMPLE, "")),
+                    )
+                    .on_hover_text("Delete")
+                    .clicked()
+                    && let Some(id) = self.selected_tracking_id(&rows)
+                {
+                    if self.selected_tracking_synced(&rows) {
+                        message = Some("readonly: synced tracking cannot be changed".to_string());
+                    } else {
+                        self.confirm_delete_id = Some(id);
+                    }
+                }
+                if ui
+                    .add_enabled(
+                        selected_tracking_unsynced,
+                        egui::Button::new(style::icon_label(ui, icons::PENCIL_SIMPLE, "")),
+                    )
+                    .on_hover_text("Edit")
+                    .clicked()
+                {
+                    if let Some(form) = self.form_from_selected(&rows, &conn) {
+                        self.edit_modal = Some(form);
+                    } else {
+                        message = Some("readonly: synced tracking cannot be changed".to_string());
+                    }
+                }
+                if ui
+                    .button(style::icon_label(ui, icons::PLUS, ""))
+                    .on_hover_text("Add")
+                    .clicked()
+                {
+                    self.edit_modal = Some(self.new_form(&conn, rows.get(self.selected)));
+                }
+            });
         });
 
         let table_rows = to_table_rows(&rows, &self.filter_start, &self.filter_end);
@@ -161,13 +188,33 @@ impl TrackingsView {
             .iter()
             .map(|row| matches!(row, DisplayRow::Gap(_)))
             .collect();
+        let context_state: Vec<ContextMenuState> = rows
+            .iter()
+            .map(|row| {
+                let is_tracking = matches!(row, DisplayRow::Tracking(_));
+                let is_unsynced_tracking =
+                    matches!(row, DisplayRow::Tracking(t) if t.jira_synced == 0);
+                ContextMenuState {
+                    edit_enabled: is_unsynced_tracking,
+                    delete_enabled: is_unsynced_tracking,
+                    copy_enabled: true,
+                    storno_enabled: is_tracking,
+                }
+            })
+            .collect();
         let action = table::render_table(
             ui,
             "trackings_table",
             &["Project", "Start", "End", "Hours", "Desc", "Sync", "Source"],
             &table_rows,
             Some(self.selected),
-            true,
+            Some(ContextMenuConfig {
+                edit: true,
+                delete: true,
+                copy: false,
+                storno: true,
+            }),
+            Some(&context_state),
             Some(&dim_rows),
         );
         if let Some(action) = action {
@@ -192,6 +239,15 @@ impl TrackingsView {
                     if let Some(row) = table_rows.get(idx) {
                         ctx.copy_text(row.join(" | "));
                         message = Some("row copied".to_string());
+                    }
+                }
+                RowAction::Storno(idx) => {
+                    self.selected = idx;
+                    if let Some(DisplayRow::Tracking(t)) = rows.get(idx) {
+                        message = Some(match storno_tracking(&conn, config, t) {
+                            Ok(msg) => msg,
+                            Err(err) => format!("error: {err}"),
+                        });
                     }
                 }
             }
@@ -240,18 +296,21 @@ impl TrackingsView {
 
                             ui.separator();
                             ui.horizontal(|ui| {
-                                if ui.button("Today").clicked() {
-                                    self.filter_start = today.format("%Y-%m-%d").to_string();
-                                    self.filter_end = self.filter_start.clone();
-                                    self.filter_modal = false;
-                                    self.selected = 0;
-                                }
                                 if ui
                                     .button(style::icon_label(ui, icons::CHECK, "OK"))
                                     .clicked()
                                 {
                                     self.filter_start = start_date.format("%Y-%m-%d").to_string();
                                     self.filter_end = end_date.format("%Y-%m-%d").to_string();
+                                    self.filter_modal = false;
+                                    self.selected = 0;
+                                }
+                                if ui
+                                    .button(style::icon_label(ui, icons::CALENDAR_DOT, "Today"))
+                                    .clicked()
+                                {
+                                    self.filter_start = today.format("%Y-%m-%d").to_string();
+                                    self.filter_end = self.filter_start.clone();
                                     self.filter_modal = false;
                                     self.selected = 0;
                                 }
@@ -598,9 +657,9 @@ impl TrackingsView {
                 form.end_date = end_date;
                 form.end_time = format_hhmm(end_time);
             }
-            if let Some(idx) = form.projects.iter().position(|p| p == &g.after_project) {
+            if let Some(idx) = form.projects.iter().position(|p| p == &g.previous_project) {
                 form.selected_project = idx;
-                form.project_name = g.after_project.clone();
+                form.project_name = g.previous_project.clone();
             }
         }
         form

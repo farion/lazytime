@@ -174,11 +174,17 @@ pub async fn run_event_loop(
             state.process_event(&conn, &cache, info, Utc::now()).await?;
         }
 
+        {
+            let conn = crate::db::open(config.db_path())?;
+            state.refresh_autotracking_suspension(&conn, Utc::now())?;
+        }
+
         while let Ok(action) = rx_popup.try_recv() {
             state.clear_reminder_popup();
+            let conn = crate::db::open(config.db_path())?;
             match action {
                 PopupAction::Yes => {
-                    state.resume_autotracking();
+                    state.resume_autotracking(&conn)?;
                     let mut conn = crate::db::open(config.db_path())?;
                     crate::db::start_tracking(
                         &mut conn,
@@ -197,8 +203,8 @@ pub async fn run_event_loop(
                         crate::time::format_ts_local(&Utc::now())
                     );
                 }
-                PopupAction::No => state.reminder_no(Utc::now()),
-                PopupAction::Snooze => state.reminder_snooze(Utc::now()),
+                PopupAction::No => state.reminder_no(&conn, Utc::now())?,
+                PopupAction::Snooze => state.reminder_snooze(&conn, Utc::now())?,
             }
         }
 

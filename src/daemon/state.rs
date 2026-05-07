@@ -7,6 +7,7 @@ use crate::platform::types::{WindowEventInfo, WindowInfo};
 use crate::rules::RuleCache;
 
 const MANUAL_STOP_SNOOZE_UNTIL_KEY: &str = "autotracking_snooze_until";
+pub const AUTOTRACKING_SUSPENDED_UNTIL_KEY: &str = "autotracking_suspended_until";
 
 #[derive(Debug, Clone)]
 pub struct DaemonState {
@@ -59,6 +60,7 @@ impl DaemonState {
             .unwrap_or_else(|| self.config.default_project.clone());
 
         let active = db::get_active_tracking(conn)?;
+        self.refresh_autotracking_suspension(conn, now)?;
         if self.paused.is_some() {
             tracing::debug!("tracking is paused due to lock; skipping daemon auto-tracking");
             return Ok(());
@@ -170,6 +172,9 @@ impl DaemonState {
     }
 
     pub fn reminder_due(&self, now: DateTime<Utc>) -> bool {
+        if self.autotracking_suspended {
+            return false;
+        }
         if !self.within_working_hours(now) {
             return false;
         }
@@ -179,25 +184,41 @@ impl DaemonState {
         }
     }
 
-    pub fn reminder_no(&mut self, now: DateTime<Utc>) {
+    pub fn reminder_no(&mut self, conn: &rusqlite::Connection, now: DateTime<Utc>) -> Result<()> {
         self.autotracking_suspended = true;
         let next_at = now + chrono::Duration::seconds(self.config.track_reminder_seconds as i64);
+        db::upsert_config_key(
+            conn,
+            AUTOTRACKING_SUSPENDED_UNTIL_KEY,
+            &crate::time::format_ts(&next_at),
+        )?;
         self.reminder_next_at = Some(next_at);
         tracing::info!(
             "autotracking_paused: reason=reminder_no next_reminder_at={}",
             crate::time::format_ts_local(&next_at)
         );
+        Ok(())
     }
 
-    pub fn reminder_snooze(&mut self, now: DateTime<Utc>) {
+    pub fn reminder_snooze(
+        &mut self,
+        conn: &rusqlite::Connection,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
         self.autotracking_suspended = true;
         let next_at =
             now + chrono::Duration::seconds(self.config.track_reminder_snooze_seconds as i64);
+        db::upsert_config_key(
+            conn,
+            AUTOTRACKING_SUSPENDED_UNTIL_KEY,
+            &crate::time::format_ts(&next_at),
+        )?;
         self.reminder_next_at = Some(next_at);
         tracing::info!(
             "autotracking_paused: reason=reminder_snooze next_reminder_at={}",
             crate::time::format_ts_local(&next_at)
         );
+        Ok(())
     }
 
     pub fn mark_popup_shown(&mut self, now: DateTime<Utc>) {
@@ -213,8 +234,45 @@ impl DaemonState {
         self.reminder_popup_open
     }
 
-    pub fn resume_autotracking(&mut self) {
+    pub fn resume_autotracking(&mut self, conn: &rusqlite::Connection) -> Result<()> {
         self.autotracking_suspended = false;
+        db::release_lock(conn, AUTOTRACKING_SUSPENDED_UNTIL_KEY)?;
+        Ok(())
+    }
+
+    pub fn autotracking_suspended(&self) -> bool {
+        self.autotracking_suspended
+    }
+
+    pub fn refresh_autotracking_suspension(
+        &mut self,
+        conn: &rusqlite::Connection,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        let Some(raw_until) = db::get_config_key(conn, AUTOTRACKING_SUSPENDED_UNTIL_KEY)? else {
+            self.autotracking_suspended = false;
+            return Ok(());
+        };
+
+        let Ok(until) = crate::time::parse_ts(&raw_until) else {
+            self.autotracking_suspended = false;
+            db::release_lock(conn, AUTOTRACKING_SUSPENDED_UNTIL_KEY)?;
+            return Ok(());
+        };
+
+        if now < until {
+            self.autotracking_suspended = true;
+            self.reminder_next_at = Some(until);
+            return Ok(());
+        }
+
+        self.autotracking_suspended = false;
+        db::release_lock(conn, AUTOTRACKING_SUSPENDED_UNTIL_KEY)?;
+        tracing::info!(
+            "autotracking resumed automatically after suspension window elapsed at={}",
+            crate::time::format_ts_local(&now)
+        );
+        Ok(())
     }
 
     pub fn mark_paused(&mut self, paused: PausedTracking) {

@@ -25,20 +25,24 @@ impl JiraSyncView {
 
         let mut message = None;
         ui.horizontal(|ui| {
-            let btn = ui.add_enabled(
-                !self.running,
-                egui::Button::new(style::icon_label(ui, icons::ARROWS_CLOCKWISE, "Start sync")),
-            );
-            if btn.clicked() {
-                self.start(config.clone());
-                message = Some("starting sync".to_string());
-            }
+            ui.label(egui::RichText::new("Jira Sync").size(18.0).strong());
             let status = if self.running { "RUNNING" } else { "IDLE" };
             ui.label(status);
-            if self.running {
-                paint_rotating_notch(ui);
-                ui.ctx().request_repaint();
-            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if self.running {
+                    paint_rotating_notch(ui);
+                    ui.ctx().request_repaint();
+                }
+                let btn = ui.add_enabled(
+                    !self.running,
+                    egui::Button::new(style::icon_label(ui, icons::ARROWS_CLOCKWISE, "")),
+                );
+                let btn = btn.on_hover_text("Start sync");
+                if btn.clicked() {
+                    self.start(config.clone());
+                    message = Some("starting sync".to_string());
+                }
+            });
         });
 
         let log_bg = ui.visuals().extreme_bg_color.gamma_multiply(0.8);

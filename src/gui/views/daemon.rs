@@ -69,33 +69,35 @@ impl DaemonView {
         let can_start = status == DaemonStatus::Stopped;
         let can_stop = status != DaemonStatus::Stopped;
         ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Daemon").size(18.0).strong());
             ui.label(format!("status: {}", self.status_text(config)));
-            if ui
-                .add_enabled(
-                    can_start,
-                    egui::Button::new(style::icon_label(ui, icons::PLAY, "Start")),
-                )
-                .clicked()
-            {
-                message = Some(self.start_daemon(config));
+            let changed = ui
+                .checkbox(&mut self.debug_enabled, "DEBUG")
+                .on_hover_text("Run daemon with --loglevel=DEBUG")
+                .changed();
+            if changed && status != DaemonStatus::Stopped {
+                message = Some(self.restart_daemon(config));
             }
-            if ui
-                .add_enabled(
-                    can_stop,
-                    egui::Button::new(style::icon_label(ui, icons::STOP, "Stop")),
-                )
-                .clicked()
-            {
-                message = Some(self.stop(config));
-            }
-
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let changed = ui
-                    .checkbox(&mut self.debug_enabled, "DEBUG")
-                    .on_hover_text("Run daemon with --loglevel=DEBUG")
-                    .changed();
-                if changed && status != DaemonStatus::Stopped {
-                    message = Some(self.restart_daemon(config));
+                if ui
+                    .add_enabled(
+                        can_stop,
+                        egui::Button::new(style::icon_label(ui, icons::STOP, "")),
+                    )
+                    .on_hover_text("Stop")
+                    .clicked()
+                {
+                    message = Some(self.stop(config));
+                }
+                if ui
+                    .add_enabled(
+                        can_start,
+                        egui::Button::new(style::icon_label(ui, icons::PLAY, "")),
+                    )
+                    .on_hover_text("Start")
+                    .clicked()
+                {
+                    message = Some(self.start_daemon(config));
                 }
             });
         });

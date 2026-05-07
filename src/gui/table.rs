@@ -9,6 +9,45 @@ pub enum RowAction {
     Edit(usize),
     Delete(usize),
     Copy(usize),
+    Storno(usize),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ContextMenuConfig {
+    pub edit: bool,
+    pub delete: bool,
+    pub copy: bool,
+    pub storno: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ContextMenuState {
+    pub edit_enabled: bool,
+    pub delete_enabled: bool,
+    pub copy_enabled: bool,
+    pub storno_enabled: bool,
+}
+
+impl Default for ContextMenuState {
+    fn default() -> Self {
+        Self {
+            edit_enabled: true,
+            delete_enabled: true,
+            copy_enabled: true,
+            storno_enabled: true,
+        }
+    }
+}
+
+impl Default for ContextMenuConfig {
+    fn default() -> Self {
+        Self {
+            edit: true,
+            delete: true,
+            copy: true,
+            storno: false,
+        }
+    }
 }
 
 pub fn render_table(
@@ -17,7 +56,8 @@ pub fn render_table(
     headers: &[&str],
     rows: &[Vec<String>],
     selected: Option<usize>,
-    with_context_menu: bool,
+    context_menu: Option<ContextMenuConfig>,
+    context_menu_state: Option<&[ContextMenuState]>,
     dim_rows: Option<&[bool]>,
 ) -> Option<RowAction> {
     struct Delegate<'a> {
@@ -26,7 +66,8 @@ pub fn render_table(
         selected: Option<usize>,
         dim_rows: Option<&'a [bool]>,
         action: Option<RowAction>,
-        with_context_menu: bool,
+        context_menu: Option<ContextMenuConfig>,
+        context_menu_state: Option<&'a [ContextMenuState]>,
     }
 
     impl TableDelegate for Delegate<'_> {
@@ -48,15 +89,59 @@ pub fn render_table(
 
         fn row_ui(&mut self, ui: &mut egui::Ui, row_nr: u64) {
             let row_index = row_nr as usize;
+            let state = self
+                .context_menu_state
+                .and_then(|states| states.get(row_index))
+                .copied()
+                .unwrap_or_default();
             let row_response = ui.interact(
                 ui.max_rect(),
                 ui.id().with(("row", row_index)),
                 egui::Sense::click(),
             );
-            if row_response.double_clicked() && self.with_context_menu {
+            if row_response.double_clicked() && self.context_menu.is_some() && state.edit_enabled {
                 self.action = Some(RowAction::Edit(row_index));
-            } else if row_response.clicked() && self.action.is_none() {
+            } else if (row_response.clicked() || row_response.secondary_clicked())
+                && self.action.is_none()
+            {
                 self.action = Some(RowAction::Select(row_index));
+            }
+
+            if let Some(menu) = self.context_menu {
+                row_response.context_menu(|ui| {
+                    if menu.edit
+                        && ui
+                            .add_enabled(state.edit_enabled, egui::Button::new("Edit"))
+                            .clicked()
+                    {
+                        self.action = Some(RowAction::Edit(row_index));
+                        ui.close();
+                    }
+                    if menu.delete
+                        && ui
+                            .add_enabled(state.delete_enabled, egui::Button::new("Delete"))
+                            .clicked()
+                    {
+                        self.action = Some(RowAction::Delete(row_index));
+                        ui.close();
+                    }
+                    if menu.storno
+                        && ui
+                            .add_enabled(state.storno_enabled, egui::Button::new("Storno"))
+                            .clicked()
+                    {
+                        self.action = Some(RowAction::Storno(row_index));
+                        ui.close();
+                    }
+                    if menu.copy
+                        && ui
+                            .add_enabled(state.copy_enabled, egui::Button::new("Copy"))
+                            .clicked()
+                    {
+                        self.action = Some(RowAction::Copy(row_index));
+                        ui.close();
+                    }
+                });
             }
 
             if self.selected == Some(row_nr as usize) {
@@ -99,27 +184,10 @@ pub fn render_table(
                 })
                 .inner;
 
-            if response.double_clicked() && self.with_context_menu {
+            if response.double_clicked() && self.context_menu.is_some() {
                 self.action = Some(RowAction::Edit(row_nr));
             } else if response.clicked() && self.action.is_none() {
                 self.action = Some(RowAction::Select(row_nr));
-            }
-
-            if self.with_context_menu {
-                response.context_menu(|ui| {
-                    if ui.button("Edit").clicked() {
-                        self.action = Some(RowAction::Edit(row_nr));
-                        ui.close();
-                    }
-                    if ui.button("Delete").clicked() {
-                        self.action = Some(RowAction::Delete(row_nr));
-                        ui.close();
-                    }
-                    if ui.button("Copy").clicked() {
-                        self.action = Some(RowAction::Copy(row_nr));
-                        ui.close();
-                    }
-                });
             }
         }
 
@@ -138,7 +206,8 @@ pub fn render_table(
         selected,
         dim_rows,
         action: None,
-        with_context_menu,
+        context_menu,
+        context_menu_state,
     };
 
     Table::new()
