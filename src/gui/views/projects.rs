@@ -556,6 +556,38 @@ impl ProjectsView {
         }
 
         if self.rules_modal_open {
+            if ctx.input(|i| i.key_pressed(egui::Key::A))
+                && let Some(p) = projects.get(self.selected_project)
+            {
+                self.rule_modal = Some(RuleForm {
+                    id: None,
+                    project_id: p.id,
+                    app_id: String::new(),
+                    name_regex: String::new(),
+                    precedence: "0".to_string(),
+                });
+            }
+            if ctx.input(|i| i.key_pressed(egui::Key::E))
+                && let Some(p) = projects.get(self.selected_project)
+                && let Ok(rules) = db::rules_for_project(conn, p.id)
+                && let Some(r) = rules.get(self.selected_rule)
+            {
+                self.rule_modal = Some(RuleForm {
+                    id: Some(r.id),
+                    project_id: p.id,
+                    app_id: r.app_id.clone().unwrap_or_default(),
+                    name_regex: r.name_regex.clone(),
+                    precedence: r.precedence.to_string(),
+                });
+            }
+            if ctx.input(|i| i.key_pressed(egui::Key::D))
+                && let Some(p) = projects.get(self.selected_project)
+                && let Ok(rules) = db::rules_for_project(conn, p.id)
+                && let Some(r) = rules.get(self.selected_rule)
+            {
+                self.confirm_modal = Some(ConfirmAction::DeleteRule(r.id));
+            }
+
             let down =
                 ctx.input(|i| i.key_pressed(egui::Key::ArrowDown) || i.key_pressed(egui::Key::J));
             let up =
@@ -581,6 +613,28 @@ impl ProjectsView {
         }
         if up {
             self.selected_project = self.selected_project.saturating_sub(1);
+            self.selected_rule = 0;
+        }
+
+        if ctx.input(|i| i.key_pressed(egui::Key::A)) {
+            self.project_modal = Some(ProjectForm::default());
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::E))
+            && let Some(p) = projects.get(self.selected_project)
+        {
+            self.project_modal = Some(ProjectForm {
+                id: Some(p.id),
+                name: p.name.clone(),
+                sap: p.sap_number.clone().unwrap_or_default(),
+            });
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::D))
+            && let Some(p) = projects.get(self.selected_project)
+        {
+            self.confirm_modal = Some(ConfirmAction::DeleteProject(p.id));
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::R)) {
+            self.rules_modal_open = true;
             self.selected_rule = 0;
         }
     }
