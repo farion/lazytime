@@ -72,7 +72,8 @@ pub fn setting_row(
         .show(ui, |ui| {
             ui.set_min_height(row_height);
             // Reserve the fixed label cell and draw the text at the left edge ourselves to guarantee left alignment.
-            let (rect, _resp) = ui.allocate_exact_size(egui::vec2(label_width, row_height), egui::Sense::hover());
+            let (rect, _resp) =
+                ui.allocate_exact_size(egui::vec2(label_width, row_height), egui::Sense::hover());
             // Layout the label text constrained to the label width and paint it at the cell's left-top.
             let mut job = LayoutJob::default();
             job.append(
@@ -85,11 +86,12 @@ pub fn setting_row(
             );
             job.wrap.max_width = label_width;
             let galley = ui.fonts_mut(|fonts| fonts.layout_job(job));
-            let pos = egui::pos2(
-                rect.left(),
-                rect.center().y - (galley.size().y * 0.5),
-            );
-            ui.painter().add(egui::epaint::TextShape::new(pos, galley, ui.visuals().text_color()));
+            let pos = egui::pos2(rect.left(), rect.center().y - (galley.size().y * 0.5));
+            ui.painter().add(egui::epaint::TextShape::new(
+                pos,
+                galley,
+                ui.visuals().text_color(),
+            ));
             add_field(ui);
             ui.end_row();
         });

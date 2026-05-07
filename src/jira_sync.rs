@@ -195,16 +195,34 @@ async fn ensure_issue_for_sap(
     let resolved_assignee_account_id: Option<String> = if let Some(a) = assignee {
         match client.resolve_account_id(a).await {
             Ok(Some(id)) => {
-                emit_debug(sender, format!("resolved configured jira_assignee '{}' -> accountId {}", a, id));
+                emit_debug(
+                    sender,
+                    format!(
+                        "resolved configured jira_assignee '{}' -> accountId {}",
+                        a, id
+                    ),
+                );
                 Some(id)
             }
             Ok(None) => {
                 // couldn't resolve; fall back to no assignee filter for search
-                emit_debug(sender, format!("could not resolve configured jira_assignee '{}'; searching without assignee filter", a));
+                emit_debug(
+                    sender,
+                    format!(
+                        "could not resolve configured jira_assignee '{}'; searching without assignee filter",
+                        a
+                    ),
+                );
                 None
             }
             Err(err) => {
-                emit_debug(sender, format!("warning: failed to resolve jira assignee '{}' -> {} ; searching without assignee filter", a, err));
+                emit_debug(
+                    sender,
+                    format!(
+                        "warning: failed to resolve jira assignee '{}' -> {} ; searching without assignee filter",
+                        a, err
+                    ),
+                );
                 None
             }
         }
@@ -216,19 +234,24 @@ async fn ensure_issue_for_sap(
     let mut found_issue: Option<String> = None;
     let search_assignee_for_curl = resolved_assignee_account_id.as_deref();
     match client
-        .find_issue(jira_project, sap_number, &config.jira_sap_field, search_assignee_for_curl)
+        .find_issue(
+            jira_project,
+            sap_number,
+            &config.jira_sap_field,
+            search_assignee_for_curl,
+        )
         .await
     {
-            Ok(Some(issue)) => {
-                let curl_search = client.curl_for_search(
-                    jira_project,
-                    &config.jira_sap_field,
-                    sap_number,
-                    search_assignee_for_curl,
-                );
-                if sender.is_none() {
-                    tracing::debug!(curl = %curl_search, "jira request curl");
-                }
+        Ok(Some(issue)) => {
+            let curl_search = client.curl_for_search(
+                jira_project,
+                &config.jira_sap_field,
+                sap_number,
+                search_assignee_for_curl,
+            );
+            if sender.is_none() {
+                tracing::debug!(curl = %curl_search, "jira request curl");
+            }
             emit_debug(
                 sender,
                 format!(
@@ -240,8 +263,11 @@ async fn ensure_issue_for_sap(
         }
         Ok(None) => {
             // If we searched with an assignee filter and found nothing, try again without the assignee filter.
-                if search_assignee_for_curl.is_some() {
-                emit_debug(sender, format!("no issue found using assignee filter; trying search without assignee"));
+            if search_assignee_for_curl.is_some() {
+                emit_debug(
+                    sender,
+                    format!("no issue found using assignee filter; trying search without assignee"),
+                );
                 let curl_search =
                     client.curl_for_search(jira_project, &config.jira_sap_field, sap_number, None);
                 if sender.is_none() {
@@ -302,15 +328,33 @@ async fn ensure_issue_for_sap(
         match client.resolve_account_id(a).await {
             Ok(Some(id)) => {
                 assignee_account_id = Some(id);
-                emit_debug(sender, format!("assigning created issue to accountId {}", assignee_account_id.as_ref().unwrap()));
+                emit_debug(
+                    sender,
+                    format!(
+                        "assigning created issue to accountId {}",
+                        assignee_account_id.as_ref().unwrap()
+                    ),
+                );
             }
             Ok(None) => {
                 assignee_name_for_create = Some(a);
-                emit_debug(sender, format!("assigning created issue to user name '{}' (accountId not resolved)", a));
+                emit_debug(
+                    sender,
+                    format!(
+                        "assigning created issue to user name '{}' (accountId not resolved)",
+                        a
+                    ),
+                );
             }
             Err(err) => {
                 assignee_name_for_create = Some(a);
-                emit_debug(sender, format!("warning: failed to resolve jira assignee '{}' -> {} ; will use name fallback", a, err));
+                emit_debug(
+                    sender,
+                    format!(
+                        "warning: failed to resolve jira assignee '{}' -> {} ; will use name fallback",
+                        a, err
+                    ),
+                );
             }
         }
     }
@@ -341,7 +385,10 @@ async fn ensure_issue_for_sap(
             sap_number,
         )
         .await?;
-    emit_log(sender, format!("Created issue {} for tracking {}", issue, tracking.id));
+    emit_log(
+        sender,
+        format!("Created issue {} for tracking {}", issue, tracking.id),
+    );
     cache.insert(sap_number.to_string(), issue.clone());
     Ok(issue)
 }
@@ -370,7 +417,10 @@ pub async fn run_jira_sync(
     let conn = db::open(config.db_path())?;
     let my_account_id = match client.authenticated_account_id().await {
         Ok(id) => {
-            emit_debug(sender_ref, format!("resolved jira authenticated accountId={}", id));
+            emit_debug(
+                sender_ref,
+                format!("resolved jira authenticated accountId={}", id),
+            );
             Some(id)
         }
         Err(err) => {
@@ -413,7 +463,10 @@ pub async fn run_jira_sync(
             total,
         },
     );
-    emit_log(sender_ref, format!("Jira sync started: {} trackings", total));
+    emit_log(
+        sender_ref,
+        format!("Jira sync started: {} trackings", total),
+    );
 
     let mut processed = 0usize;
     let mut issue_cache: HashMap<String, String> = HashMap::new();

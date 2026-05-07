@@ -64,7 +64,11 @@ impl Default for DaemonControlState {
             visible_rows: 1,
             message: String::new(),
             status: DaemonViewStatus::Stopped,
-            owner_id: format!("tui:{}:{}", std::process::id(), chrono::Utc::now().timestamp()),
+            owner_id: format!(
+                "tui:{}:{}",
+                std::process::id(),
+                chrono::Utc::now().timestamp()
+            ),
             child: None,
             receiver: None,
         }
@@ -134,18 +138,15 @@ impl DaemonControlState {
         if self.status == DaemonViewStatus::Outside {
             let inner_width = table_inner_width(content_area.width);
             let text = fit_line("Daemon running outside TUI", inner_width);
-            let table = Table::new(
-                [Row::new(vec![Cell::from(text)])],
-                [Constraint::Min(10)],
-            )
-            .header(Row::new(vec![
-                Cell::from("Log ").style(Style::default().add_modifier(Modifier::BOLD)),
-            ]))
-            .block(
-                Block::default()
-                    .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
-                    .padding(Padding::horizontal(1)),
-            );
+            let table = Table::new([Row::new(vec![Cell::from(text)])], [Constraint::Min(10)])
+                .header(Row::new(vec![
+                    Cell::from("Log ").style(Style::default().add_modifier(Modifier::BOLD)),
+                ]))
+                .block(
+                    Block::default()
+                        .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
+                        .padding(Padding::horizontal(1)),
+                );
             frame.render_widget(table, content_area);
         } else {
             let inner_width = table_inner_width(content_area.width);
@@ -364,12 +365,16 @@ impl DaemonControlState {
     }
 
     fn refresh_status_from_lock(&mut self, config: &Config) {
-        let lock_owner = db::open(config.db_path())
-            .ok()
-            .and_then(|conn| db::get_config_key(&conn, DAEMON_RUNTIME_LOCK_KEY).ok().flatten());
+        let lock_owner = db::open(config.db_path()).ok().and_then(|conn| {
+            db::get_config_key(&conn, DAEMON_RUNTIME_LOCK_KEY)
+                .ok()
+                .flatten()
+        });
 
         self.status = match lock_owner {
-            Some(owner) if lock_owner_matches_tui(&owner, &self.owner_id) => DaemonViewStatus::Running,
+            Some(owner) if lock_owner_matches_tui(&owner, &self.owner_id) => {
+                DaemonViewStatus::Running
+            }
             Some(_) => DaemonViewStatus::Outside,
             None => DaemonViewStatus::Stopped,
         };
@@ -422,9 +427,11 @@ impl DaemonControlState {
     }
 
     fn cleanup_owned_lock(&mut self, config: &Config, stop_pid: bool) {
-        let lock_owner = db::open(config.db_path())
-            .ok()
-            .and_then(|conn| db::get_config_key(&conn, DAEMON_RUNTIME_LOCK_KEY).ok().flatten());
+        let lock_owner = db::open(config.db_path()).ok().and_then(|conn| {
+            db::get_config_key(&conn, DAEMON_RUNTIME_LOCK_KEY)
+                .ok()
+                .flatten()
+        });
         if let Some(owner) = lock_owner {
             let parsed = parse_lock_owner(&owner);
             let owned_by_tui =

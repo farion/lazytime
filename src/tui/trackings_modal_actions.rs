@@ -10,8 +10,8 @@ use crate::tui::trackings::TrackingsState;
 use crate::tui::trackings_modal::{
     DatePicker, FilterModal, ModalMode, TrackingModal, TrackingsModal, normalize_storage_ts,
 };
-use chrono::{Duration, NaiveDate, Datelike};
 use crate::tui::trackings_rows::extract_date;
+use chrono::{Datelike, Duration, NaiveDate};
 
 fn center_line(text: &str, width: u16) -> String {
     let w = width as usize;
@@ -25,7 +25,12 @@ fn center_line(text: &str, width: u16) -> String {
 
 pub fn render_modal(frame: &mut Frame<'_>, area: Rect, modal: &TrackingsModal) {
     let mw = match modal {
-        TrackingsModal::Filter(_) => area.width.saturating_mul(3).saturating_div(4).min(96).max(56),
+        TrackingsModal::Filter(_) => area
+            .width
+            .saturating_mul(3)
+            .saturating_div(4)
+            .min(96)
+            .max(56),
         _ => (area.width / 2).min(80).max(40),
     };
     let desired_mh = match modal {
@@ -62,7 +67,7 @@ pub fn render_modal(frame: &mut Frame<'_>, area: Rect, modal: &TrackingsModal) {
             } else {
                 m.end.clone()
             };
-    let proj_line = if !m.projects.is_empty() {
+            let proj_line = if !m.projects.is_empty() {
                 let name = m
                     .selected_project
                     .and_then(|i| m.projects.get(i))
@@ -281,7 +286,13 @@ fn big_dec_dp(dp: &mut DatePicker) {
         0 => dp.year -= 5,
         1 => add_months_to_dp(dp, -5),
         2 => add_days_to_dp(dp, -7),
-        3 => dp.hour = if dp.hour < 5 { (24 + dp.hour).saturating_sub(5) } else { dp.hour - 5 },
+        3 => {
+            dp.hour = if dp.hour < 5 {
+                (24 + dp.hour).saturating_sub(5)
+            } else {
+                dp.hour - 5
+            }
+        }
         4 => {
             // align to previous 15-minute boundary or subtract 15 if already aligned
             let m = dp.minute as i32;
@@ -587,7 +598,13 @@ fn handle_tracking_modal_key(
                     Some(normalize_storage_ts(&m.end))
                 };
                 if matches!(m.mode, ModalMode::Add) {
-                    db::add_manual_tracking(conn, &project_name, &start_storage, end_storage.as_deref(), Some(&m.description))?;
+                    db::add_manual_tracking(
+                        conn,
+                        &project_name,
+                        &start_storage,
+                        end_storage.as_deref(),
+                        Some(&m.description),
+                    )?;
                     state.message = "tracking added".to_string();
                 } else if let Some(id) = m.editing_id {
                     db::update_tracking_times(

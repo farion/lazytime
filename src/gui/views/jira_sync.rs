@@ -72,7 +72,10 @@ impl JiraSyncView {
 
         std::thread::spawn(move || {
             crate::jira::set_tracing_enabled(false);
-            let rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+            let rt = match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
                 Ok(rt) => rt,
                 Err(err) => {
                     let _ = tx.send(JiraSyncEvent::Finished {
@@ -83,7 +86,9 @@ impl JiraSyncView {
                 }
             };
 
-            let result = rt.block_on(async { jira_sync::run_jira_sync(&config, false, Some(tx.clone())).await });
+            let result = rt.block_on(async {
+                jira_sync::run_jira_sync(&config, false, Some(tx.clone())).await
+            });
             crate::jira::set_tracing_enabled(true);
             if let Err(err) = result {
                 let _ = tx.send(JiraSyncEvent::Finished {
@@ -108,7 +113,10 @@ impl JiraSyncView {
                     self.push_log_line(line);
                 }
                 JiraSyncEvent::Progress { .. } => {}
-                JiraSyncEvent::Finished { success: _, message } => {
+                JiraSyncEvent::Finished {
+                    success: _,
+                    message,
+                } => {
                     self.push_log_line(message);
                     self.push_log_line(format!(
                         "--- Sync End {} ---",

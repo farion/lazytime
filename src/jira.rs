@@ -3,8 +3,8 @@ use reqwest::StatusCode;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value, json};
-use tokio::time::{Duration, sleep};
 use std::sync::atomic::{AtomicBool, Ordering};
+use tokio::time::{Duration, sleep};
 
 // When running inside the TUI we prefer to suppress jira client's tracing
 // output to avoid printing below the TUI. This global flag lets jira_sync
@@ -122,7 +122,11 @@ impl JiraClient {
         status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error()
     }
 
-    async fn send_with_retry<F>(&self, make_request: F, operation: &str) -> Result<reqwest::Response>
+    async fn send_with_retry<F>(
+        &self,
+        make_request: F,
+        operation: &str,
+    ) -> Result<reqwest::Response>
     where
         F: Fn() -> reqwest::RequestBuilder,
     {
@@ -227,12 +231,7 @@ impl JiraClient {
         let value: Value = match serde_json::from_str(&text) {
             Ok(v) => v,
             Err(e) => {
-                return Err(anyhow!(
-                    "{} parse failed: {} body: {}",
-                    operation,
-                    e,
-                    text
-                ));
+                return Err(anyhow!("{} parse failed: {} body: {}", operation, e, text));
             }
         };
         let response_short = Self::short_response_info(&value);
@@ -543,22 +542,21 @@ impl JiraClient {
                             Some(&payload),
                         );
                         jira_debug!(curl = %curl_manual, "jira request curl");
-                        self
-                            .send_with_retry(
-                                || {
-                                    self.with_auth(
-                                        self.client
-                                            .post(&url)
-                                            .query(&[
-                                                ("adjustEstimate", "manual"),
-                                                ("reduceBy", reduce_by.as_str()),
-                                            ])
-                                            .json(&payload),
-                                    )
-                                },
-                                "jira add worklog (manual estimate)",
-                            )
-                            .await?
+                        self.send_with_retry(
+                            || {
+                                self.with_auth(
+                                    self.client
+                                        .post(&url)
+                                        .query(&[
+                                            ("adjustEstimate", "manual"),
+                                            ("reduceBy", reduce_by.as_str()),
+                                        ])
+                                        .json(&payload),
+                                )
+                            },
+                            "jira add worklog (manual estimate)",
+                        )
+                        .await?
                     }
                 }
             }
@@ -579,10 +577,7 @@ impl JiraClient {
         let mut out: Vec<WorklogItem> = Vec::new();
 
         loop {
-            let url = format!(
-                "{}/rest/api/3/issue/{}/worklog",
-                self.base_url, issue_key
-            );
+            let url = format!("{}/rest/api/3/issue/{}/worklog", self.base_url, issue_key);
             let response = self
                 .send_with_retry(
                     || {
@@ -651,7 +646,8 @@ impl JiraClient {
             self.base_url, issue_key, worklog_id
         );
 
-        let curl_auto = self.curl_for_update_worklog(issue_key, worklog_id, started, seconds, comment);
+        let curl_auto =
+            self.curl_for_update_worklog(issue_key, worklog_id, started, seconds, comment);
         jira_debug!(curl = %curl_auto, "jira request curl");
         let response = match self
             .send_with_retry(
@@ -719,22 +715,21 @@ impl JiraClient {
                             Some(&payload),
                         );
                         jira_debug!(curl = %curl_manual, "jira request curl");
-                        self
-                            .send_with_retry(
-                                || {
-                                    self.with_auth(
-                                        self.client
-                                            .put(&url)
-                                            .query(&[
-                                                ("adjustEstimate", "manual"),
-                                                ("reduceBy", reduce_by.as_str()),
-                                            ])
-                                            .json(&payload),
-                                    )
-                                },
-                                "jira update worklog (manual estimate)",
-                            )
-                            .await?
+                        self.send_with_retry(
+                            || {
+                                self.with_auth(
+                                    self.client
+                                        .put(&url)
+                                        .query(&[
+                                            ("adjustEstimate", "manual"),
+                                            ("reduceBy", reduce_by.as_str()),
+                                        ])
+                                        .json(&payload),
+                                )
+                            },
+                            "jira update worklog (manual estimate)",
+                        )
+                        .await?
                     }
                 }
             }
@@ -803,9 +798,7 @@ impl JiraClient {
 
         let mut cmd = format!(
             "curl -sS -X {} '{}' {} -H 'Content-Type: application/json'",
-            method,
-            url,
-            auth_part
+            method, url, auth_part
         );
         if let Some(p) = payload {
             if let Ok(s) = serde_json::to_string(p) {
@@ -854,7 +847,10 @@ impl JiraClient {
         } else if let Some(name) = assignee_name {
             fields.insert("assignee".to_string(), json!({ "name": name }));
         }
-        fields.insert(sap_field_key.to_string(), Value::String(sap_number.to_string()));
+        fields.insert(
+            sap_field_key.to_string(),
+            Value::String(sap_number.to_string()),
+        );
         let payload = json!({ "fields": Value::Object(fields) });
         let url = format!("{}/rest/api/3/issue", self.base_url);
         self.curl_command("POST", &url, Some(&payload))
@@ -869,9 +865,14 @@ impl JiraClient {
         comment: &str,
     ) -> String {
         // Round as in add_worklog
-        let rounded_seconds = if seconds <= 0 { 60 } else { ((seconds + 59) / 60) * 60 };
+        let rounded_seconds = if seconds <= 0 {
+            60
+        } else {
+            ((seconds + 59) / 60) * 60
+        };
         // normalize started similar to add_worklog: parse and format
-            let started_dt: chrono::DateTime<chrono::FixedOffset> = started.parse().unwrap_or_else(|_| {
+        let started_dt: chrono::DateTime<chrono::FixedOffset> =
+            started.parse().unwrap_or_else(|_| {
                 // fallback: treat as UTC
                 chrono::DateTime::parse_from_rfc3339(started).unwrap_or_else(|_| {
                     chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap())
@@ -883,7 +884,10 @@ impl JiraClient {
             "timeSpentSeconds": rounded_seconds,
             "comment": Self::adf_text(comment),
         });
-        let url = format!("{}/rest/api/3/issue/{}/worklog?adjustEstimate=auto", self.base_url, issue_key);
+        let url = format!(
+            "{}/rest/api/3/issue/{}/worklog?adjustEstimate=auto",
+            self.base_url, issue_key
+        );
         self.curl_command("POST", &url, Some(&payload))
     }
 
@@ -896,12 +900,17 @@ impl JiraClient {
         seconds: i64,
         comment: &str,
     ) -> String {
-        let rounded_seconds = if seconds <= 0 { 60 } else { ((seconds + 59) / 60) * 60 };
-        let started_dt: chrono::DateTime<chrono::FixedOffset> = started.parse().unwrap_or_else(|_| {
-            chrono::DateTime::parse_from_rfc3339(started).unwrap_or_else(|_| {
-                chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap())
-            })
-        });
+        let rounded_seconds = if seconds <= 0 {
+            60
+        } else {
+            ((seconds + 59) / 60) * 60
+        };
+        let started_dt: chrono::DateTime<chrono::FixedOffset> =
+            started.parse().unwrap_or_else(|_| {
+                chrono::DateTime::parse_from_rfc3339(started).unwrap_or_else(|_| {
+                    chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap())
+                })
+            });
         let started_fmt = started_dt.format("%Y-%m-%dT%H:%M:%S%.3f%z").to_string();
         let payload = json!({
             "started": started_fmt,
@@ -916,10 +925,7 @@ impl JiraClient {
     }
 
     fn quoted_field(field: &str) -> String {
-        if field
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-        {
+        if field.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
             field.to_string()
         } else {
             format!("\"{}\"", field)

@@ -83,10 +83,7 @@ impl CurrentState {
             x: area.x,
             y: area.y + title_height,
             width: area.width,
-            height: area
-                .height
-                .saturating_sub(title_height)
-                .saturating_sub(1),
+            height: area.height.saturating_sub(title_height).saturating_sub(1),
         };
 
         let left = " CURRENT";
@@ -239,8 +236,8 @@ impl CurrentState {
                 params![now, now],
             )?;
             self.message = if changed > 0 {
-                let snooze_until = now_dt
-                    + chrono::Duration::seconds(config.track_reminder_snooze_seconds as i64);
+                let snooze_until =
+                    now_dt + chrono::Duration::seconds(config.track_reminder_snooze_seconds as i64);
                 db::upsert_config_key(
                     conn,
                     MANUAL_STOP_SNOOZE_UNTIL_KEY,

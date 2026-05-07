@@ -142,7 +142,9 @@ impl JiraSyncState {
         let end = min(start + visible, len);
 
         let table = Table::new(rows_all[start..end].iter().cloned(), [Constraint::Min(10)])
-            .header(Row::new(vec![Cell::from("Log ").style(Style::default().add_modifier(Modifier::BOLD))]))
+            .header(Row::new(vec![
+                Cell::from("Log ").style(Style::default().add_modifier(Modifier::BOLD)),
+            ]))
             .block(
                 Block::default()
                     .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
@@ -153,10 +155,7 @@ impl JiraSyncState {
         let status = if self.running { "RUNNING" } else { "IDLE" };
         let footer_text = format!(
             "progress: {}/{} | {} | {}",
-            self.processed,
-            self.total,
-            status,
-            self.message
+            self.processed, self.total, status, self.message
         );
         let footer = Rect {
             x: area.x,
@@ -201,7 +200,9 @@ impl JiraSyncState {
                         }
                     };
 
-                    let result = rt.block_on(async { jira_sync::run_jira_sync(&cfg, false, Some(tx.clone())).await });
+                    let result = rt.block_on(async {
+                        jira_sync::run_jira_sync(&cfg, false, Some(tx.clone())).await
+                    });
                     // restore tracing for jira module so other parts of the app behave normally
                     crate::jira::set_tracing_enabled(true);
                     if let Err(err) = result {

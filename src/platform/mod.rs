@@ -2,6 +2,10 @@ pub mod types;
 
 #[cfg(all(feature = "backend-linux", target_os = "linux"))]
 mod atspi;
+#[cfg(all(feature = "backend-macos", target_os = "macos"))]
+mod ax;
+#[cfg(all(feature = "backend-macos", target_os = "macos"))]
+mod cgwindow;
 #[cfg(all(feature = "backend-linux", target_os = "linux"))]
 mod desktop;
 #[cfg(all(feature = "backend-linux", target_os = "linux"))]
@@ -16,10 +20,6 @@ mod sway;
 mod windows;
 #[cfg(all(feature = "backend-linux", target_os = "linux"))]
 mod x11;
-#[cfg(all(feature = "backend-macos", target_os = "macos"))]
-mod ax;
-#[cfg(all(feature = "backend-macos", target_os = "macos"))]
-mod cgwindow;
 
 use anyhow::Result;
 use chrono::Utc;
@@ -44,7 +44,11 @@ pub fn detected_backend_name() -> &'static str {
     }
 }
 
-#[cfg(all(not(feature = "backend-sway"), feature = "backend-linux", target_os = "linux"))]
+#[cfg(all(
+    not(feature = "backend-sway"),
+    feature = "backend-linux",
+    target_os = "linux"
+))]
 pub fn detected_backend_name() -> &'static str {
     "linux-desktop"
 }
@@ -61,7 +65,11 @@ pub fn detected_backend_name() -> &'static str {
 
 #[cfg(not(any(
     all(feature = "backend-sway", target_os = "linux"),
-    all(not(feature = "backend-sway"), feature = "backend-linux", target_os = "linux"),
+    all(
+        not(feature = "backend-sway"),
+        feature = "backend-linux",
+        target_os = "linux"
+    ),
     all(feature = "backend-windows", target_os = "windows"),
     all(feature = "backend-macos", target_os = "macos")
 )))]
@@ -69,7 +77,11 @@ pub fn detected_backend_name() -> &'static str {
     "none"
 }
 
-pub async fn run_event_loop(config: &Config, cache: RuleCache, mut state: DaemonState) -> Result<()> {
+pub async fn run_event_loop(
+    config: &Config,
+    cache: RuleCache,
+    mut state: DaemonState,
+) -> Result<()> {
     tracing::info!("starting daemon event loop");
     #[cfg(not(feature = "popup-ui"))]
     tracing::warn!(
@@ -319,7 +331,11 @@ fn spawn_backend_monitors(tx_lock: mpsc::Sender<LockEvent>, tx_window: mpsc::Sen
     desktop::spawn_desktop_monitors(tx_lock, tx_window);
 }
 
-#[cfg(all(not(feature = "backend-sway"), feature = "backend-linux", target_os = "linux"))]
+#[cfg(all(
+    not(feature = "backend-sway"),
+    feature = "backend-linux",
+    target_os = "linux"
+))]
 fn spawn_backend_monitors(tx_lock: mpsc::Sender<LockEvent>, tx_window: mpsc::Sender<WindowInfo>) {
     tracing::info!("platform backend selected: linux-desktop");
     desktop::spawn_desktop_monitors(tx_lock, tx_window);
@@ -327,7 +343,11 @@ fn spawn_backend_monitors(tx_lock: mpsc::Sender<LockEvent>, tx_window: mpsc::Sen
 
 #[cfg(not(any(
     all(feature = "backend-sway", target_os = "linux"),
-    all(not(feature = "backend-sway"), feature = "backend-linux", target_os = "linux"),
+    all(
+        not(feature = "backend-sway"),
+        feature = "backend-linux",
+        target_os = "linux"
+    ),
     all(feature = "backend-windows", target_os = "windows"),
     all(feature = "backend-macos", target_os = "macos")
 )))]

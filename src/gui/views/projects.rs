@@ -7,6 +7,8 @@ use crate::db;
 use super::super::style;
 use super::super::table::{self, RowAction};
 
+const DIALOG_LABEL_WIDTH: f32 = 110.0;
+
 #[derive(Default)]
 pub struct ProjectsView {
     selected_project: usize,
@@ -40,7 +42,12 @@ enum ConfirmAction {
 }
 
 impl ProjectsView {
-    pub fn ui(&mut self, ctx: &egui::Context, ui: &mut egui::Ui, config: &crate::config::Config) -> Option<String> {
+    pub fn ui(
+        &mut self,
+        ctx: &egui::Context,
+        ui: &mut egui::Ui,
+        config: &crate::config::Config,
+    ) -> Option<String> {
         let conn = db::open(config.db_path()).ok()?;
         let mut projects = db::projects(&conn).unwrap_or_default();
         if projects.is_empty() {
@@ -181,19 +188,27 @@ impl ProjectsView {
             .order(egui::Order::Foreground)
             .collapsible(false)
             .resizable(false)
+            .min_width(400.0)
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .show(ctx, |ui| {
                 egui::Frame::new()
                     .inner_margin(egui::Margin::same(style::DIALOG_MARGIN))
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.label("Name");
-                            style::padded_text_edit(ui, &mut modal.name);
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("SAP");
-                            style::padded_text_edit(ui, &mut modal.sap);
-                        });
+                        ui.set_min_width(ui.available_width());
+                        style::setting_text_row(
+                            ui,
+                            "Name",
+                            "Name used in trackings and reports.",
+                            DIALOG_LABEL_WIDTH,
+                            &mut modal.name,
+                        );
+                        style::setting_text_row(
+                            ui,
+                            "SAP",
+                            "Optional SAP number.",
+                            DIALOG_LABEL_WIDTH,
+                            &mut modal.sap,
+                        );
                         ui.separator();
                         ui.horizontal(|ui| {
                             if ui
@@ -251,23 +266,34 @@ impl ProjectsView {
             .order(egui::Order::Foreground)
             .collapsible(false)
             .resizable(false)
+            .min_width(460.0)
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .show(ctx, |ui| {
                 egui::Frame::new()
                     .inner_margin(egui::Margin::same(style::DIALOG_MARGIN))
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.label("app_id");
-                            style::padded_text_edit(ui, &mut modal.app_id);
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("name_regex");
-                            style::padded_text_edit(ui, &mut modal.name_regex);
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("precedence");
-                            style::padded_text_edit(ui, &mut modal.precedence);
-                        });
+                        ui.set_min_width(ui.available_width());
+                        style::setting_text_row(
+                            ui,
+                            "app_id",
+                            "Optional app identifier.",
+                            DIALOG_LABEL_WIDTH,
+                            &mut modal.app_id,
+                        );
+                        style::setting_text_row(
+                            ui,
+                            "name_regex",
+                            "Regex matched against title.",
+                            DIALOG_LABEL_WIDTH,
+                            &mut modal.name_regex,
+                        );
+                        style::setting_text_row(
+                            ui,
+                            "precedence",
+                            "Higher number means higher priority.",
+                            DIALOG_LABEL_WIDTH,
+                            &mut modal.precedence,
+                        );
                         ui.separator();
                         ui.horizontal(|ui| {
                             if ui
@@ -280,7 +306,8 @@ impl ProjectsView {
                                     let precedence = match modal.precedence.trim().parse::<i64>() {
                                         Ok(v) => v,
                                         Err(_) => {
-                                            message = Some("precedence must be a number".to_string());
+                                            message =
+                                                Some("precedence must be a number".to_string());
                                             return;
                                         }
                                     };
@@ -353,7 +380,9 @@ impl ProjectsView {
                                     .clicked()
                                 {
                                     let res = match action {
-                                        ConfirmAction::DeleteProject(id) => db::delete_project(&conn, id),
+                                        ConfirmAction::DeleteProject(id) => {
+                                            db::delete_project(&conn, id)
+                                        }
                                         ConfirmAction::DeleteRule(id) => db::delete_rule(&conn, id),
                                     };
                                     if let Err(err) = res {
@@ -361,12 +390,14 @@ impl ProjectsView {
                                     } else {
                                         message = Some(match action {
                                             ConfirmAction::DeleteProject(_) => {
-                                                self.selected_project = self.selected_project.saturating_sub(1);
+                                                self.selected_project =
+                                                    self.selected_project.saturating_sub(1);
                                                 self.selected_rule = 0;
                                                 "project deleted".to_string()
                                             }
                                             ConfirmAction::DeleteRule(_) => {
-                                                self.selected_rule = self.selected_rule.saturating_sub(1);
+                                                self.selected_rule =
+                                                    self.selected_rule.saturating_sub(1);
                                                 "rule deleted".to_string()
                                             }
                                         });
@@ -519,13 +550,16 @@ impl ProjectsView {
         projects: &[db::Project],
         conn: &rusqlite::Connection,
     ) {
-        if self.project_modal.is_some() || self.rule_modal.is_some() || self.confirm_modal.is_some() {
+        if self.project_modal.is_some() || self.rule_modal.is_some() || self.confirm_modal.is_some()
+        {
             return;
         }
 
         if self.rules_modal_open {
-            let down = ctx.input(|i| i.key_pressed(egui::Key::ArrowDown) || i.key_pressed(egui::Key::J));
-            let up = ctx.input(|i| i.key_pressed(egui::Key::ArrowUp) || i.key_pressed(egui::Key::K));
+            let down =
+                ctx.input(|i| i.key_pressed(egui::Key::ArrowDown) || i.key_pressed(egui::Key::J));
+            let up =
+                ctx.input(|i| i.key_pressed(egui::Key::ArrowUp) || i.key_pressed(egui::Key::K));
             if let Some(p) = projects.get(self.selected_project) {
                 let rules = db::rules_for_project(conn, p.id).unwrap_or_default();
                 if down && !rules.is_empty() {
@@ -538,7 +572,8 @@ impl ProjectsView {
             return;
         }
 
-        let down = ctx.input(|i| i.key_pressed(egui::Key::ArrowDown) || i.key_pressed(egui::Key::J));
+        let down =
+            ctx.input(|i| i.key_pressed(egui::Key::ArrowDown) || i.key_pressed(egui::Key::J));
         let up = ctx.input(|i| i.key_pressed(egui::Key::ArrowUp) || i.key_pressed(egui::Key::K));
         if down && !projects.is_empty() {
             self.selected_project = (self.selected_project + 1).min(projects.len() - 1);

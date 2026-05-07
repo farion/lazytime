@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::{Local, Utc, Duration, NaiveDate};
+use chrono::{Duration, Local, NaiveDate, Utc};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Rect};
@@ -155,26 +155,26 @@ impl TrackingsState {
                         let duration = format_duration_from_ts(&t.start_ts, t.end_ts.as_ref());
                         // right-align duration into 8 chars column
                         let duration_cell = format!("{:>8}", duration);
-                let desc = t.notes.clone().unwrap_or_default();
-                let desc_col = if desc.is_empty() {
-                    String::new()
-                } else if desc.chars().count() > 15 {
-                    format!("{}…", desc.chars().take(15).collect::<String>())
-                } else {
-                    desc.clone()
-                };
-                Row::new(vec![
-                    Cell::from(t.project_name.clone()),
-                    Cell::from(start_formatted),
-                    Cell::from(end_formatted),
-                    Cell::from(duration_cell),
-                    Cell::from(desc_col),
-                    // Show 0 or 1 for jira_synced
-                    Cell::from(format!("{}", if t.jira_synced != 0 { 1 } else { 0 })),
-                    Cell::from(t.created_by.clone()),
-                ])
-                .style(style)
-            }
+                        let desc = t.notes.clone().unwrap_or_default();
+                        let desc_col = if desc.is_empty() {
+                            String::new()
+                        } else if desc.chars().count() > 15 {
+                            format!("{}…", desc.chars().take(15).collect::<String>())
+                        } else {
+                            desc.clone()
+                        };
+                        Row::new(vec![
+                            Cell::from(t.project_name.clone()),
+                            Cell::from(start_formatted),
+                            Cell::from(end_formatted),
+                            Cell::from(duration_cell),
+                            Cell::from(desc_col),
+                            // Show 0 or 1 for jira_synced
+                            Cell::from(format!("{}", if t.jira_synced != 0 { 1 } else { 0 })),
+                            Cell::from(t.created_by.clone()),
+                        ])
+                        .style(style)
+                    }
                     DisplayRow::Gap(g) => {
                         let start = if single_day_filter {
                             match crate::time::parse_ts(&g.start_ts) {
@@ -195,7 +195,7 @@ impl TrackingsState {
                         let duration = format_duration_between(&g.start_ts, &g.end_ts);
                         let duration_cell = format!("{:>8}", duration);
                         Row::new(vec![
-                            Cell::from("") ,
+                            Cell::from(""),
                             Cell::from(start),
                             Cell::from(end),
                             Cell::from(duration_cell),
@@ -248,21 +248,22 @@ impl TrackingsState {
         let table = Table::new(
             rows,
             [
-            Constraint::Length(24),
-            Constraint::Length(12),
-            Constraint::Length(12),
-            Constraint::Length(8),
-            Constraint::Length(15),
-            // small sync column
-            Constraint::Length(6),
-            Constraint::Length(10),
+                Constraint::Length(24),
+                Constraint::Length(12),
+                Constraint::Length(12),
+                Constraint::Length(8),
+                Constraint::Length(15),
+                // small sync column
+                Constraint::Length(6),
+                Constraint::Length(10),
             ],
         )
         .header(Row::new(vec![
             Cell::from("Project ").style(Style::default().add_modifier(Modifier::BOLD)),
             Cell::from("Start ").style(Style::default().add_modifier(Modifier::BOLD)),
             Cell::from("End ").style(Style::default().add_modifier(Modifier::BOLD)),
-            Cell::from(format!("{:>8}", "Duration")).style(Style::default().add_modifier(Modifier::BOLD)),
+            Cell::from(format!("{:>8}", "Duration"))
+                .style(Style::default().add_modifier(Modifier::BOLD)),
             Cell::from("Description ").style(Style::default().add_modifier(Modifier::BOLD)),
             Cell::from("Sync ").style(Style::default().add_modifier(Modifier::BOLD)),
             Cell::from("By ").style(Style::default().add_modifier(Modifier::BOLD)),
@@ -314,7 +315,6 @@ impl TrackingsState {
         if let Some(modal) = &self.modal {
             render_modal(frame, area, modal);
         }
-
     }
 
     pub fn handle_key(
@@ -373,7 +373,11 @@ impl TrackingsState {
                 let today = Local::now().date_naive();
                 let sday = parse_day(&self.filter_start).unwrap_or(today);
                 let eday = parse_day(&self.filter_end).unwrap_or(sday);
-                let (from, to) = if sday <= eday { (sday, eday) } else { (eday, sday) };
+                let (from, to) = if sday <= eday {
+                    (sday, eday)
+                } else {
+                    (eday, sday)
+                };
                 let len = (to - from).num_days() + 1;
                 let new_from = from + Duration::days(-len);
                 let new_to = from + Duration::days(-1);
@@ -390,7 +394,11 @@ impl TrackingsState {
                 let today = Local::now().date_naive();
                 let sday = parse_day(&self.filter_start).unwrap_or(today);
                 let eday = parse_day(&self.filter_end).unwrap_or(sday);
-                let (from, to) = if sday <= eday { (sday, eday) } else { (eday, sday) };
+                let (from, to) = if sday <= eday {
+                    (sday, eday)
+                } else {
+                    (eday, sday)
+                };
                 let len = (to - from).num_days() + 1;
                 let new_from = to + Duration::days(1);
                 let new_to = to + Duration::days(len);

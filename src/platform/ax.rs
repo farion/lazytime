@@ -39,7 +39,9 @@ end tell
     let output = Command::new("osascript").arg("-e").arg(script).output();
     match output {
         Ok(out) if out.status.success() => {
-            let text = String::from_utf8_lossy(&out.stdout).trim().to_ascii_lowercase();
+            let text = String::from_utf8_lossy(&out.stdout)
+                .trim()
+                .to_ascii_lowercase();
             text == "true"
         }
         _ => false,
@@ -69,7 +71,11 @@ tell application "System Events"
 end tell
 "#;
 
-    let output = Command::new("osascript").arg("-e").arg(script).output().ok()?;
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .output()
+        .ok()?;
     if !output.status.success() {
         return None;
     }
@@ -125,8 +131,9 @@ mod tests {
 
     #[test]
     fn parse_prefers_bundle_id() {
-        let info = parse_frontmost_payload("com.apple.Safari\t/Applications/Safari.app/\tExample\tSafari")
-            .expect("expected parsed info");
+        let info =
+            parse_frontmost_payload("com.apple.Safari\t/Applications/Safari.app/\tExample\tSafari")
+                .expect("expected parsed info");
         assert_eq!(info.app_id.as_deref(), Some("com.apple.Safari"));
         assert_eq!(info.title, "Example");
     }

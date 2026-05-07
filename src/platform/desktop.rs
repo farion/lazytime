@@ -2,7 +2,10 @@ use std::sync::mpsc;
 
 use super::types::{LockEvent, WindowInfo};
 
-pub fn spawn_desktop_monitors(tx_lock: mpsc::Sender<LockEvent>, tx_window: mpsc::Sender<WindowInfo>) {
+pub fn spawn_desktop_monitors(
+    tx_lock: mpsc::Sender<LockEvent>,
+    tx_window: mpsc::Sender<WindowInfo>,
+) {
     spawn_lock_monitors(tx_lock);
     spawn_window_monitors(tx_window);
 }

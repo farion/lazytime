@@ -332,7 +332,6 @@ impl ProjectsState {
                 modal_area,
             );
         }
-
     }
 
     pub fn handle_key(&mut self, key: KeyEvent, conn: &rusqlite::Connection) -> Result<bool> {

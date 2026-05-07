@@ -33,7 +33,7 @@ pub enum ModalMode {
 }
 
 #[derive(Debug, Clone)]
-    pub struct TrackingModal {
+pub struct TrackingModal {
     pub mode: ModalMode,
     pub projects: Vec<String>,
     pub selected_project: Option<usize>,

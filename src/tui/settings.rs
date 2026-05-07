@@ -120,7 +120,8 @@ impl SettingsState {
         let view = fields[start..end].to_vec();
 
         frame.render_widget(
-            Paragraph::new(view).block(Block::default().borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)),
+            Paragraph::new(view)
+                .block(Block::default().borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)),
             content,
         );
 
@@ -234,29 +235,135 @@ impl SettingsState {
             "Per-day ranges. Press Enter to open structured weekday editor.",
             false,
         );
-        self.push_field(&mut out, 3, "track_reminder_seconds", &self.track_reminder_seconds, "Reminder interval in seconds.", false);
-        self.push_field(&mut out, 4, "track_reminder_snooze_seconds", &self.track_reminder_snooze_seconds, "Snooze time after manual stop, in seconds.", false);
-        self.push_field(&mut out, 5, "summary_update_seconds", &self.summary_update_seconds, "Summary refresh interval in seconds.", false);
-        self.push_field(&mut out, 6, "report_start", &self.report_start, "Default report start date (YYYY-MM-DD).", false);
-        self.push_field(&mut out, 7, "report_end", &self.report_end, "Default report end date (YYYY-MM-DD).", false);
-        self.push_field(&mut out, 8, "db_file", &self.db_file, "SQLite database file path.", false);
-        self.push_field(&mut out, 9, "jira_url", &self.jira_url, "Jira base URL.", false);
+        self.push_field(
+            &mut out,
+            3,
+            "track_reminder_seconds",
+            &self.track_reminder_seconds,
+            "Reminder interval in seconds.",
+            false,
+        );
+        self.push_field(
+            &mut out,
+            4,
+            "track_reminder_snooze_seconds",
+            &self.track_reminder_snooze_seconds,
+            "Snooze time after manual stop, in seconds.",
+            false,
+        );
+        self.push_field(
+            &mut out,
+            5,
+            "summary_update_seconds",
+            &self.summary_update_seconds,
+            "Summary refresh interval in seconds.",
+            false,
+        );
+        self.push_field(
+            &mut out,
+            6,
+            "report_start",
+            &self.report_start,
+            "Default report start date (YYYY-MM-DD).",
+            false,
+        );
+        self.push_field(
+            &mut out,
+            7,
+            "report_end",
+            &self.report_end,
+            "Default report end date (YYYY-MM-DD).",
+            false,
+        );
+        self.push_field(
+            &mut out,
+            8,
+            "db_file",
+            &self.db_file,
+            "SQLite database file path.",
+            false,
+        );
+        self.push_field(
+            &mut out,
+            9,
+            "jira_url",
+            &self.jira_url,
+            "Jira base URL.",
+            false,
+        );
         let token = if self.jira_token_masked {
             "*".repeat(self.jira_token.chars().count())
         } else {
             self.jira_token.clone()
         };
-        self.push_field(&mut out, 10, "jira_token", &token, "Jira auth token (masked). Press m to toggle mask.", false);
-        self.push_field(&mut out, 11, "jira_email", &self.jira_email, "Jira email for basic auth (optional).", false);
-        self.push_field(&mut out, 12, "jira_project", &self.jira_project, "Jira project key for syncing.", false);
-        self.push_field(&mut out, 13, "jira_assignee", &self.jira_assignee, "Jira assignee (optional override).", false);
-        self.push_field(&mut out, 14, "jira_issue_type", &self.jira_issue_type, "Jira issue type to create.", false);
-        self.push_field(&mut out, 15, "jira_sap_field", &self.jira_sap_field, "Custom Jira field name/id for SAP mapping.", false);
-        self.push_field(&mut out, 16, "ipc_socket_path", &self.ipc_socket_path, "IPC endpoint for daemon communication.", false);
+        self.push_field(
+            &mut out,
+            10,
+            "jira_token",
+            &token,
+            "Jira auth token (masked). Press m to toggle mask.",
+            false,
+        );
+        self.push_field(
+            &mut out,
+            11,
+            "jira_email",
+            &self.jira_email,
+            "Jira email for basic auth (optional).",
+            false,
+        );
+        self.push_field(
+            &mut out,
+            12,
+            "jira_project",
+            &self.jira_project,
+            "Jira project key for syncing.",
+            false,
+        );
+        self.push_field(
+            &mut out,
+            13,
+            "jira_assignee",
+            &self.jira_assignee,
+            "Jira assignee (optional override).",
+            false,
+        );
+        self.push_field(
+            &mut out,
+            14,
+            "jira_issue_type",
+            &self.jira_issue_type,
+            "Jira issue type to create.",
+            false,
+        );
+        self.push_field(
+            &mut out,
+            15,
+            "jira_sap_field",
+            &self.jira_sap_field,
+            "Custom Jira field name/id for SAP mapping.",
+            false,
+        );
+        self.push_field(
+            &mut out,
+            16,
+            "ipc_socket_path",
+            &self.ipc_socket_path,
+            "IPC endpoint for daemon communication.",
+            false,
+        );
         out
     }
 
-    fn push_field(&self, out: &mut Vec<Line<'static>>, idx: usize, name: &str, value: &str, desc: &str, required: bool) {
+    fn push_field(
+        &self,
+        out: &mut Vec<Line<'static>>,
+        idx: usize,
+        name: &str,
+        value: &str,
+        desc: &str,
+        required: bool,
+    ) {
         let mut label = name.to_string();
         if required {
             label.push('*');
@@ -354,14 +461,23 @@ impl SettingsState {
     fn to_config(&self) -> std::result::Result<Config, String> {
         let cfg = Config {
             default_project: self.default_project.clone(),
-            tracking_stability_seconds: parse_u64("tracking_stability_seconds", &self.tracking_stability_seconds)?,
+            tracking_stability_seconds: parse_u64(
+                "tracking_stability_seconds",
+                &self.tracking_stability_seconds,
+            )?,
             working_hours: self.working_hours.clone(),
-            track_reminder_seconds: parse_u64("track_reminder_seconds", &self.track_reminder_seconds)?,
+            track_reminder_seconds: parse_u64(
+                "track_reminder_seconds",
+                &self.track_reminder_seconds,
+            )?,
             track_reminder_snooze_seconds: parse_u64(
                 "track_reminder_snooze_seconds",
                 &self.track_reminder_snooze_seconds,
             )?,
-            summary_update_seconds: parse_u64("summary_update_seconds", &self.summary_update_seconds)?,
+            summary_update_seconds: parse_u64(
+                "summary_update_seconds",
+                &self.summary_update_seconds,
+            )?,
             report_start: to_opt(&self.report_start),
             report_end: to_opt(&self.report_end),
             db_file: self.db_file.clone(),
@@ -435,7 +551,12 @@ impl WorkingHoursModal {
         let mh = area.height.saturating_sub(6).min(20);
         let mx = area.x + (area.width.saturating_sub(mw)) / 2;
         let my = area.y + (area.height.saturating_sub(mh)) / 2;
-        let rect = Rect { x: mx, y: my, width: mw, height: mh };
+        let rect = Rect {
+            x: mx,
+            y: my,
+            width: mw,
+            height: mh,
+        };
 
         let mut lines = Vec::new();
         lines.push(Line::raw("weekdays by name | ranges"));
@@ -473,7 +594,11 @@ impl WorkingHoursModal {
 
         frame.render_widget(Clear, rect);
         frame.render_widget(
-            Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(" working_hours ")),
+            Paragraph::new(lines).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" working_hours "),
+            ),
             rect,
         );
     }

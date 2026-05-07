@@ -122,11 +122,32 @@ impl Config {
             if *weekday > 6 {
                 bail!("working_hours weekday {} out of range (0..6)", weekday);
             }
+            let mut previous_end: Option<u32> = None;
             for range in ranges {
-                parse_hhmm(&range.start)
+                let (start_h, start_m) = parse_hhmm(&range.start)
                     .with_context(|| format!("invalid working_hours start {}", range.start))?;
-                parse_hhmm(&range.end)
+                let (end_h, end_m) = parse_hhmm(&range.end)
                     .with_context(|| format!("invalid working_hours end {}", range.end))?;
+                let start_minutes = (start_h * 60) + start_m;
+                let end_minutes = (end_h * 60) + end_m;
+                if end_minutes <= start_minutes {
+                    bail!(
+                        "working_hours weekday {} invalid: end {} must be greater than start {}",
+                        weekday,
+                        range.end,
+                        range.start
+                    );
+                }
+                if let Some(previous_end) = previous_end
+                    && start_minutes <= previous_end
+                {
+                    bail!(
+                        "working_hours weekday {} invalid: start {} must be greater than previous end",
+                        weekday,
+                        range.start
+                    );
+                }
+                previous_end = Some(end_minutes);
             }
         }
         if let Some(start) = &self.report_start {

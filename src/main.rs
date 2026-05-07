@@ -63,7 +63,11 @@ async fn main() -> Result<()> {
         let mut today_secs: i64 = 0;
         for r in rows {
             let start = crate::time::parse_ts(&r.start_ts).ok();
-            let end = r.end_ts.as_ref().and_then(|e| crate::time::parse_ts(e).ok()).or_else(|| Some(chrono::Utc::now()));
+            let end = r
+                .end_ts
+                .as_ref()
+                .and_then(|e| crate::time::parse_ts(e).ok())
+                .or_else(|| Some(chrono::Utc::now()));
             if let (Some(s), Some(e)) = (start, end) {
                 let secs = e.signed_duration_since(s).num_seconds();
                 if secs > 0 {
@@ -88,13 +92,21 @@ async fn main() -> Result<()> {
                 let now = chrono::Utc::now();
                 let secs = now.signed_duration_since(s).num_seconds();
                 if secs > 0 { secs } else { 0 }
-            } else { 0 };
+            } else {
+                0
+            };
             let cur_str = fmt(cur_secs);
             let today_str = fmt(today_secs);
-            format!("{{\"text\":\"󱫠  {} {} | {}\",\"class\":\"active\"}}", a.project_name, cur_str, today_str)
+            format!(
+                "{{\"text\":\"󱫠  {} {} | {}\",\"class\":\"active\"}}",
+                a.project_name, cur_str, today_str
+            )
         } else {
             let today_str = fmt(today_secs);
-            format!("{{\"text\":\"No tracking  | {}\",\"class\":\"inactive\"}}", today_str)
+            format!(
+                "{{\"text\":\"No tracking  | {}\",\"class\":\"inactive\"}}",
+                today_str
+            )
         };
         println!("{}", text);
         return Ok(());

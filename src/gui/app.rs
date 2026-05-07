@@ -261,22 +261,70 @@ impl eframe::App for GuiApp {
                 ui.separator();
 
                 let collapsed = self.config.sidebar_collapsed;
-                if Self::sidebar_entry(ui, collapsed, self.mode == ViewMode::Current, icons::CLOCK, "Current").clicked() {
+                if Self::sidebar_entry(
+                    ui,
+                    collapsed,
+                    self.mode == ViewMode::Current,
+                    icons::CLOCK,
+                    "Current",
+                )
+                .clicked()
+                {
                     self.set_mode(ViewMode::Current);
                 }
-                if Self::sidebar_entry(ui, collapsed, self.mode == ViewMode::Trackings, icons::CALENDAR, "Trackings").clicked() {
+                if Self::sidebar_entry(
+                    ui,
+                    collapsed,
+                    self.mode == ViewMode::Trackings,
+                    icons::CALENDAR,
+                    "Trackings",
+                )
+                .clicked()
+                {
                     self.set_mode(ViewMode::Trackings);
                 }
-                if Self::sidebar_entry(ui, collapsed, self.mode == ViewMode::Projects, icons::PACKAGE, "Projects").clicked() {
+                if Self::sidebar_entry(
+                    ui,
+                    collapsed,
+                    self.mode == ViewMode::Projects,
+                    icons::PACKAGE,
+                    "Projects",
+                )
+                .clicked()
+                {
                     self.set_mode(ViewMode::Projects);
                 }
-                if Self::sidebar_entry(ui, collapsed, self.mode == ViewMode::Jira, icons::CLOUD_ARROW_UP, "Jira").clicked() {
+                if Self::sidebar_entry(
+                    ui,
+                    collapsed,
+                    self.mode == ViewMode::Jira,
+                    icons::CLOUD_ARROW_UP,
+                    "Jira",
+                )
+                .clicked()
+                {
                     self.set_mode(ViewMode::Jira);
                 }
-                if Self::sidebar_entry(ui, collapsed, self.mode == ViewMode::Daemon, icons::HAMMER, "Daemon").clicked() {
+                if Self::sidebar_entry(
+                    ui,
+                    collapsed,
+                    self.mode == ViewMode::Daemon,
+                    icons::HAMMER,
+                    "Daemon",
+                )
+                .clicked()
+                {
                     self.set_mode(ViewMode::Daemon);
                 }
-                if Self::sidebar_entry(ui, collapsed, self.mode == ViewMode::Settings, icons::GEAR, "Settings").clicked() {
+                if Self::sidebar_entry(
+                    ui,
+                    collapsed,
+                    self.mode == ViewMode::Settings,
+                    icons::GEAR,
+                    "Settings",
+                )
+                .clicked()
+                {
                     self.set_mode(ViewMode::Settings);
                 }
             });
@@ -287,7 +335,8 @@ impl eframe::App for GuiApp {
             let autotrack_snoozed = self.current.autotrack_is_snoozed(&self.config);
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(autotrack_status).weak());
-                if autotrack_snoozed && ui.small_button("Unsnooze").clicked()
+                if autotrack_snoozed
+                    && ui.small_button("Unsnooze").clicked()
                     && let Some(msg) = self.current.unsnooze_autotracking(&self.config)
                 {
                     self.push_toast(msg);

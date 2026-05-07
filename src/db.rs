@@ -419,7 +419,7 @@ pub fn update_tracking_times(
     start_ts: &str,
     end_ts: Option<&str>,
     notes: Option<&str>,
-    ) -> Result<()> {
+) -> Result<()> {
     if end_ts.is_none() {
         let now = crate::time::format_ts(&Utc::now());
         conn.execute(

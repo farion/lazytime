@@ -4,6 +4,7 @@ pub mod jira_sync;
 pub mod projects;
 pub mod projects_modal;
 pub mod quotes;
+pub mod settings;
 pub mod statusbar;
 pub mod trackings;
 pub mod trackings_cleanup;
@@ -11,7 +12,6 @@ pub mod trackings_modal;
 pub mod trackings_modal_actions;
 pub mod trackings_rows;
 pub mod trackings_storno;
-pub mod settings;
 
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -108,7 +108,8 @@ pub fn run(config: &Config, config_path: Option<&str>) -> Result<()> {
             // Render exactly three lines: one blank line, the title line, one blank line.
             // Title has 1-space padding left and right as requested.
             let left = " LazyTime TUI";
-            let hints = "c=current | t=trackings | p=projects | j=jira | o=daemon | x=settings | q=quit";
+            let hints =
+                "c=current | t=trackings | p=projects | j=jira | o=daemon | x=settings | q=quit";
             let inner_width = chunks[0].width.saturating_sub(2) as usize; // allow for minimal padding
             let left_len = left.chars().count();
             let hints_len = hints.chars().count();

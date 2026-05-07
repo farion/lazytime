@@ -106,9 +106,11 @@ impl DaemonView {
     }
 
     fn compute_status(&self, config: &Config) -> DaemonStatus {
-        let lock_owner = db::open(config.db_path())
-            .ok()
-            .and_then(|conn| db::get_config_key(&conn, DAEMON_RUNTIME_LOCK_KEY).ok().flatten());
+        let lock_owner = db::open(config.db_path()).ok().and_then(|conn| {
+            db::get_config_key(&conn, DAEMON_RUNTIME_LOCK_KEY)
+                .ok()
+                .flatten()
+        });
         match lock_owner {
             Some(owner) if lock_owner_matches_tui(&owner, &self.owner_id) => DaemonStatus::Running,
             Some(_) => DaemonStatus::Outside,
@@ -241,12 +243,15 @@ impl DaemonView {
     }
 
     fn cleanup_owned_lock(&mut self, config: &Config, stop_pid: bool) {
-        let lock_owner = db::open(config.db_path())
-            .ok()
-            .and_then(|conn| db::get_config_key(&conn, DAEMON_RUNTIME_LOCK_KEY).ok().flatten());
+        let lock_owner = db::open(config.db_path()).ok().and_then(|conn| {
+            db::get_config_key(&conn, DAEMON_RUNTIME_LOCK_KEY)
+                .ok()
+                .flatten()
+        });
         if let Some(owner) = lock_owner {
             let parsed = parse_lock_owner(&owner);
-            let owned_by_tui = parsed.token.as_deref() == Some(self.owner_id.as_str()) || owner == self.owner_id;
+            let owned_by_tui =
+                parsed.token.as_deref() == Some(self.owner_id.as_str()) || owner == self.owner_id;
             if owned_by_tui {
                 if stop_pid {
                     if let Some(pid) = parsed.pid {
@@ -269,7 +274,11 @@ impl DaemonView {
 
     fn ensure_owner_id(&mut self) {
         if self.owner_id.is_empty() {
-            self.owner_id = format!("gui:{}:{}", std::process::id(), chrono::Utc::now().timestamp());
+            self.owner_id = format!(
+                "gui:{}:{}",
+                std::process::id(),
+                chrono::Utc::now().timestamp()
+            );
         }
     }
 }
@@ -367,7 +376,8 @@ fn is_boilerplate_prefix(prefix: &str) -> bool {
         return true;
     }
     trimmed.chars().all(|c| {
-        c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '[' | ']' | '(' | ')' | '{' | '}' | '=')
+        c.is_ascii_alphanumeric()
+            || matches!(c, '_' | '-' | '.' | '[' | ']' | '(' | ')' | '{' | '}' | '=')
     })
 }
 

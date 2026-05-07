@@ -22,7 +22,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use super::types::{LockEvent, LockSource, OutputRect, WindowInfo};
 
-pub fn spawn_windows_monitors(tx_lock: mpsc::Sender<LockEvent>, tx_window: mpsc::Sender<WindowInfo>) {
+pub fn spawn_windows_monitors(
+    tx_lock: mpsc::Sender<LockEvent>,
+    tx_window: mpsc::Sender<WindowInfo>,
+) {
     let tx_hook = tx_window.clone();
     std::thread::spawn(move || {
         if let Err(err) = monitor_window_hooks(tx_hook) {
@@ -156,7 +159,8 @@ fn monitor_lock_events(tx_lock: mpsc::Sender<LockEvent>) -> anyhow::Result<()> {
         anyhow::bail!("failed to create message-only window for WTS notifications");
     }
 
-    let registered = unsafe { WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION) }.is_ok();
+    let registered =
+        unsafe { WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION) }.is_ok();
     if !registered {
         unsafe {
             let _ = DestroyWindow(hwnd);
@@ -169,7 +173,9 @@ fn monitor_lock_events(tx_lock: mpsc::Sender<LockEvent>) -> anyhow::Result<()> {
     while unsafe { GetMessageW(&mut msg, hwnd, 0, 0) }.as_bool() {
         if msg.message == WM_WTSSESSION_CHANGE {
             let event = match msg.wParam {
-                WPARAM(w) if w as u32 == WTS_SESSION_LOCK => Some(LockEvent::Locked(LockSource::WtsSession)),
+                WPARAM(w) if w as u32 == WTS_SESSION_LOCK => {
+                    Some(LockEvent::Locked(LockSource::WtsSession))
+                }
                 WPARAM(w) if w as u32 == WTS_SESSION_UNLOCK => {
                     Some(LockEvent::Unlocked(LockSource::WtsSession))
                 }
@@ -380,7 +386,10 @@ mod tests {
 
     #[test]
     fn normalize_windows_app_id_keeps_drive_uppercase() {
-        assert_eq!(normalize_windows_app_id("d:\\Work\\Tool.EXE"), "D:\\work\\tool.exe");
+        assert_eq!(
+            normalize_windows_app_id("d:\\Work\\Tool.EXE"),
+            "D:\\work\\tool.exe"
+        );
     }
 
     #[test]

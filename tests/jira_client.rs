@@ -66,12 +66,8 @@ fn search_jql_uses_configured_field_and_current_user() {
 
 #[test]
 fn search_jql_quotes_human_readable_field() {
-    let jql = JiraClient::build_search_jql(
-        "LT",
-        "SAP-Nr-Projektaufgabe[Short text]",
-        "SAP-7",
-        None,
-    );
+    let jql =
+        JiraClient::build_search_jql("LT", "SAP-Nr-Projektaufgabe[Short text]", "SAP-7", None);
     assert!(jql.contains("\"SAP-Nr-Projektaufgabe[Short text]\" ~ \"SAP-7\""));
 }
 
@@ -190,7 +186,10 @@ async fn issue_worklogs_parses_response() {
     assert_eq!(wl.id, "w1");
     assert_eq!(wl.started, "2026-05-04T10:00:00.000+0200");
     assert_eq!(wl.time_spent_seconds, Some(3600));
-    assert_eq!(wl.author.as_ref().and_then(|a| a.account_id.as_deref()), Some("acc-123"));
+    assert_eq!(
+        wl.author.as_ref().and_then(|a| a.account_id.as_deref()),
+        Some("acc-123")
+    );
 
     server.await.expect("server done");
 }

@@ -6,7 +6,10 @@ use x11rb::protocol::xproto::{AtomEnum, ConnectionExt};
 use super::types::WindowInfo;
 
 pub fn monitor_active_window(tx_window: mpsc::Sender<WindowInfo>) -> Result<()> {
-    if std::env::var("DISPLAY").map(|v| v.trim().is_empty()).unwrap_or(true) {
+    if std::env::var("DISPLAY")
+        .map(|v| v.trim().is_empty())
+        .unwrap_or(true)
+    {
         tracing::info!("x11 fallback monitor: DISPLAY not set; skipping X11 fallback");
         return Ok(());
     }
@@ -81,7 +84,11 @@ fn window_class<C: Connection>(conn: &C, window: u32) -> Result<String> {
         bail!("WM_CLASS is empty")
     }
 
-    let parts: Vec<&[u8]> = reply.value.split(|b| *b == 0).filter(|s| !s.is_empty()).collect();
+    let parts: Vec<&[u8]> = reply
+        .value
+        .split(|b| *b == 0)
+        .filter(|s| !s.is_empty())
+        .collect();
     let class = if parts.len() > 1 { parts[1] } else { parts[0] };
     Ok(String::from_utf8(class.to_vec())?)
 }

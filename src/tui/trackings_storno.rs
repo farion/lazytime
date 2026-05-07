@@ -128,7 +128,10 @@ async fn apply_storno_to_worklog(
 ) -> Result<StornoAction> {
     let worklogs = client.issue_worklogs(issue_key).await?;
     let Some(existing) = worklogs.into_iter().find(|w| w.id == worklog_id) else {
-        bail!("storno failed: jira worklog {} no longer exists", worklog_id);
+        bail!(
+            "storno failed: jira worklog {} no longer exists",
+            worklog_id
+        );
     };
 
     let existing_seconds = existing.time_spent_seconds.unwrap_or(0);
@@ -195,7 +198,10 @@ fn other_synced_description_lines(
     let mut keep = HashSet::new();
 
     for row in all {
-        if row.id == tracking.id || row.jira_synced == 0 || row.project_name != tracking.project_name {
+        if row.id == tracking.id
+            || row.jira_synced == 0
+            || row.project_name != tracking.project_name
+        {
             continue;
         }
         let Ok(start_dt) = crate::time::parse_ts(&row.start_ts) else {

@@ -1,11 +1,14 @@
+use chrono::Datelike;
 use lazytime::config::Config;
 use lazytime::db;
 use lazytime::tui::trackings_cleanup::cleanup_today_unsynced_trackings;
-use chrono::Datelike;
 use std::collections::BTreeMap;
 use tempfile::tempdir;
 
-fn test_config(db_path: &std::path::Path, working_hours: BTreeMap<u8, Vec<lazytime::config::TimeRange>>) -> Config {
+fn test_config(
+    db_path: &std::path::Path,
+    working_hours: BTreeMap<u8, Vec<lazytime::config::TimeRange>>,
+) -> Config {
     Config {
         default_project: "DefaultProject".to_string(),
         tracking_stability_seconds: 10,
@@ -35,14 +38,7 @@ fn cleanup_merges_same_project_unsynced_without_gap() {
     db::migrate(&conn).expect("migrate");
 
     let today = chrono::Local::now().date_naive();
-    let ts = |h: u32, m: u32| {
-        format!(
-            "{}T{:02}:{:02}:00",
-            today.format("%Y-%m-%d"),
-            h,
-            m
-        )
-    };
+    let ts = |h: u32, m: u32| format!("{}T{:02}:{:02}:00", today.format("%Y-%m-%d"), h, m);
 
     db::add_manual_tracking(&conn, "A", &ts(9, 0), Some(&ts(9, 30)), None).expect("insert 1");
     db::add_manual_tracking(&conn, "A", &ts(9, 30), Some(&ts(10, 0)), None).expect("insert 2");
@@ -69,14 +65,7 @@ fn cleanup_keeps_rows_when_gap_exists() {
     db::migrate(&conn).expect("migrate");
 
     let today = chrono::Local::now().date_naive();
-    let ts = |h: u32, m: u32| {
-        format!(
-            "{}T{:02}:{:02}:00",
-            today.format("%Y-%m-%d"),
-            h,
-            m
-        )
-    };
+    let ts = |h: u32, m: u32| format!("{}T{:02}:{:02}:00", today.format("%Y-%m-%d"), h, m);
 
     db::add_manual_tracking(&conn, "A", &ts(9, 0), Some(&ts(9, 30)), None).expect("insert 1");
     db::add_manual_tracking(&conn, "A", &ts(9, 32), Some(&ts(10, 0)), None).expect("insert 2");
@@ -109,14 +98,7 @@ fn cleanup_does_not_merge_synced_rows() {
     db::migrate(&conn).expect("migrate");
 
     let today = chrono::Local::now().date_naive();
-    let ts = |h: u32, m: u32| {
-        format!(
-            "{}T{:02}:{:02}:00",
-            today.format("%Y-%m-%d"),
-            h,
-            m
-        )
-    };
+    let ts = |h: u32, m: u32| format!("{}T{:02}:{:02}:00", today.format("%Y-%m-%d"), h, m);
 
     db::add_manual_tracking(&conn, "A", &ts(9, 0), Some(&ts(9, 30)), None).expect("insert 1");
     db::add_manual_tracking(&conn, "A", &ts(9, 30), Some(&ts(10, 0)), None).expect("insert 2");

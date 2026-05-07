@@ -31,9 +31,16 @@ pub fn render_table(
 
     impl TableDelegate for Delegate<'_> {
         fn header_cell_ui(&mut self, ui: &mut egui::Ui, cell: &HeaderCellInfo) {
-            let title = self.headers.get(cell.col_range.start).copied().unwrap_or_default();
+            let title = self
+                .headers
+                .get(cell.col_range.start)
+                .copied()
+                .unwrap_or_default();
             egui::Frame::new()
-                .inner_margin(egui::Margin::symmetric(style::BUTTON_PAD_X, style::BUTTON_PAD_Y))
+                .inner_margin(egui::Margin::symmetric(
+                    style::BUTTON_PAD_X,
+                    style::BUTTON_PAD_Y,
+                ))
                 .show(ui, |ui| {
                     ui.strong(title);
                 });
@@ -79,7 +86,10 @@ pub fn render_table(
             }
 
             let response = egui::Frame::new()
-                .inner_margin(egui::Margin::symmetric(style::BUTTON_PAD_X, style::BUTTON_PAD_Y))
+                .inner_margin(egui::Margin::symmetric(
+                    style::BUTTON_PAD_X,
+                    style::BUTTON_PAD_Y,
+                ))
                 .show(ui, |ui| {
                     ui.add(
                         egui::Label::new(text)
@@ -118,7 +128,10 @@ pub fn render_table(
         }
     }
 
-    let columns: Vec<Column> = headers.iter().map(|_| Column::new(160.0).resizable(true)).collect();
+    let columns: Vec<Column> = headers
+        .iter()
+        .map(|_| Column::new(160.0).resizable(true))
+        .collect();
     let mut delegate = Delegate {
         headers,
         rows,

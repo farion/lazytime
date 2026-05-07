@@ -37,7 +37,9 @@ end tell
     let output = Command::new("osascript").arg("-e").arg(script).output();
     match output {
         Ok(out) if out.status.success() => {
-            let text = String::from_utf8_lossy(&out.stdout).trim().to_ascii_lowercase();
+            let text = String::from_utf8_lossy(&out.stdout)
+                .trim()
+                .to_ascii_lowercase();
             text == "true"
         }
         _ => false,

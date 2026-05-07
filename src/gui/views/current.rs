@@ -55,7 +55,12 @@ impl CurrentView {
         }
     }
 
-    pub fn ui(&mut self, ctx: &egui::Context, ui: &mut egui::Ui, config: &Config) -> Option<String> {
+    pub fn ui(
+        &mut self,
+        ctx: &egui::Context,
+        ui: &mut egui::Ui,
+        config: &Config,
+    ) -> Option<String> {
         let conn = db::open(config.db_path()).ok()?;
         let all = db::list_today(&conn).ok()?;
         let active = db::get_active_tracking(&conn).ok().flatten();
@@ -273,8 +278,20 @@ fn render_big_duration_lines(value: &str) -> ([String; 5], [String; 5]) {
         }
     }
     (
-        [lines[0].clone(), lines[1].clone(), lines[2].clone(), lines[3].clone(), lines[4].clone()],
-        [masks[0].clone(), masks[1].clone(), masks[2].clone(), masks[3].clone(), masks[4].clone()],
+        [
+            lines[0].clone(),
+            lines[1].clone(),
+            lines[2].clone(),
+            lines[3].clone(),
+            lines[4].clone(),
+        ],
+        [
+            masks[0].clone(),
+            masks[1].clone(),
+            masks[2].clone(),
+            masks[3].clone(),
+            masks[4].clone(),
+        ],
     )
 }
 
@@ -306,7 +323,11 @@ fn glyph_mask(ch: char) -> [&'static str; 5] {
     }
 }
 
-fn tracking_strategy_sentence(conn: &rusqlite::Connection, config: &Config, now: DateTime<Utc>) -> String {
+fn tracking_strategy_sentence(
+    conn: &rusqlite::Connection,
+    config: &Config,
+    now: DateTime<Utc>,
+) -> String {
     let daemon_running = db::get_config_key(conn, DAEMON_RUNTIME_LOCK_KEY)
         .ok()
         .flatten()
@@ -371,14 +392,7 @@ fn working_hours_state(config: &Config, now: DateTime<Local>) -> (bool, Option<D
         };
         let date = now.date_naive() + Duration::days(day_offset);
         if let Some(next) = Local
-            .with_ymd_and_hms(
-                date.year(),
-                date.month(),
-                date.day(),
-                start_h,
-                start_m,
-                0,
-            )
+            .with_ymd_and_hms(date.year(), date.month(), date.day(), start_h, start_m, 0)
             .single()
         {
             return (false, Some(next));

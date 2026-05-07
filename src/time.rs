@@ -28,14 +28,12 @@ pub fn parse_ts(s: &str) -> Result<DateTime<Utc>> {
         "%Y-%m-%d %H:%M",
     ] {
         if let Ok(naive) = NaiveDateTime::parse_from_str(s, fmt) {
-            return Ok(
-                Local
-                    .from_local_datetime(&naive)
-                    .earliest()
-                    .or_else(|| Local.from_local_datetime(&naive).latest())
-                    .map(|dt| dt.with_timezone(&Utc))
-                    .unwrap_or_else(|| Utc.from_utc_datetime(&naive)),
-            );
+            return Ok(Local
+                .from_local_datetime(&naive)
+                .earliest()
+                .or_else(|| Local.from_local_datetime(&naive).latest())
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or_else(|| Utc.from_utc_datetime(&naive)));
         }
     }
 

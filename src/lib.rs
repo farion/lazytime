@@ -2,15 +2,15 @@ pub mod cli;
 pub mod config;
 pub mod daemon;
 pub mod db;
+pub mod gui;
 pub mod ipc;
 pub mod jira;
 pub mod jira_sync;
-pub mod popup;
 pub mod platform;
+pub mod popup;
 pub mod rules;
 pub mod time;
 pub mod tui;
-pub mod gui;
 
 pub fn init_logging() {
     // Default to INFO, but allow override via RUST_LOG or provided level from CLI
