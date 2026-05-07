@@ -22,6 +22,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use super::types::{LockEvent, LockSource, OutputRect, WindowInfo};
 
+const OBJID_WINDOW: i32 = 0;
+const CHILDID_SELF: i32 = 0;
+
 pub fn spawn_windows_monitors(
     tx_lock: mpsc::Sender<LockEvent>,
     tx_window: mpsc::Sender<WindowInfo>,
@@ -29,7 +32,14 @@ pub fn spawn_windows_monitors(
     let tx_hook = tx_window.clone();
     std::thread::spawn(move || {
         if let Err(err) = monitor_window_hooks(tx_hook) {
-            tracing::warn!("windows hook monitor failed; falling back to polling: {err}");
+            tracing::warn!("windows hook monitor failed: {err}");
+        }
+    });
+
+    let tx_poll = tx_window.clone();
+    std::thread::spawn(move || {
+        if let Err(err) = monitor_window_polling(tx_poll) {
+            tracing::warn!("windows polling monitor failed: {err}");
         }
     });
 
@@ -53,6 +63,7 @@ pub fn output_rect(output_name: &str) -> Option<OutputRect> {
 }
 
 fn monitor_window_hooks(tx_window: mpsc::Sender<WindowInfo>) -> anyhow::Result<()> {
+    reset_window_signature();
     if let Ok(mut slot) = window_event_slot().lock() {
         *slot = Some(tx_window.clone());
     }
@@ -84,11 +95,12 @@ fn monitor_window_hooks(tx_window: mpsc::Sender<WindowInfo>) -> anyhow::Result<(
         if let Ok(mut slot) = window_event_slot().lock() {
             *slot = None;
         }
-        monitor_window_polling(tx_window)?;
-        return Ok(());
+        anyhow::bail!("SetWinEventHook could not register foreground or title hooks");
     }
 
     tracing::info!("windows window monitor: SetWinEventHook active");
+    emit_foreground_window_info(&tx_window);
+
     let mut msg = MSG::default();
     while unsafe { GetMessageW(&mut msg, HWND::default(), 0, 0) }.as_bool() {
         unsafe {
@@ -115,25 +127,18 @@ fn monitor_window_hooks(tx_window: mpsc::Sender<WindowInfo>) -> anyhow::Result<(
 }
 
 fn monitor_window_polling(tx_window: mpsc::Sender<WindowInfo>) -> anyhow::Result<()> {
-    tracing::info!("windows window monitor: polling fallback active");
-    let mut last_sig = String::new();
+    tracing::info!("windows window monitor: polling backup active");
+    reset_window_signature();
+    emit_foreground_window_info(&tx_window);
+
     loop {
         let hwnd = unsafe { GetForegroundWindow() };
         if !hwnd.is_invalid() {
             if let Some(info) = collect_window_info(hwnd) {
-                let sig = format!(
-                    "{}|{}|{}",
-                    info.app_id.clone().unwrap_or_default(),
-                    info.class.clone().unwrap_or_default(),
-                    info.title
-                );
-                if sig != last_sig {
-                    let _ = tx_window.send(info);
-                    last_sig = sig;
-                }
+                emit_window_info(&tx_window, info);
             }
         }
-        std::thread::sleep(std::time::Duration::from_millis(450));
+        std::thread::sleep(std::time::Duration::from_millis(250));
     }
 }
 
@@ -202,12 +207,16 @@ fn monitor_lock_events(tx_lock: mpsc::Sender<LockEvent>) -> anyhow::Result<()> {
 
 fn collect_window_info(hwnd: HWND) -> Option<WindowInfo> {
     let title = window_text(hwnd);
-    if title.trim().is_empty() {
+    let class = class_name(hwnd);
+    let (_, app_id) = process_identity(hwnd);
+
+    if title.trim().is_empty()
+        && class.as_deref().is_none_or(str::is_empty)
+        && app_id.as_deref().is_none_or(str::is_empty)
+    {
         return None;
     }
 
-    let class = class_name(hwnd);
-    let (_, app_id) = process_identity(hwnd);
     let output = monitor_info(hwnd).map(|(name, _)| name);
 
     Some(WindowInfo {
@@ -335,15 +344,25 @@ fn normalize_windows_app_id(raw: &str) -> String {
 
 unsafe extern "system" fn win_event_callback(
     _hook: HWINEVENTHOOK,
-    _event: u32,
+    event: u32,
     hwnd: HWND,
-    _id_object: i32,
-    _id_child: i32,
+    id_object: i32,
+    id_child: i32,
     _thread_id: u32,
     _time: u32,
 ) {
     if hwnd.is_invalid() {
         return;
+    }
+
+    if event == EVENT_OBJECT_NAMECHANGE {
+        if id_object != OBJID_WINDOW || id_child != CHILDID_SELF {
+            return;
+        }
+        let foreground = unsafe { GetForegroundWindow() };
+        if foreground != hwnd {
+            return;
+        }
     }
 
     if let Some(info) = collect_window_info(hwnd) {
@@ -352,9 +371,52 @@ unsafe extern "system" fn win_event_callback(
             .ok()
             .and_then(|guard| guard.as_ref().cloned());
         if let Some(tx) = tx {
-            let _ = tx.send(info);
+            emit_window_info(&tx, info);
         }
     }
+}
+
+fn emit_foreground_window_info(tx: &mpsc::Sender<WindowInfo>) {
+    let hwnd = unsafe { GetForegroundWindow() };
+    if hwnd.is_invalid() {
+        return;
+    }
+    if let Some(info) = collect_window_info(hwnd) {
+        emit_window_info(tx, info);
+    }
+}
+
+fn emit_window_info(tx: &mpsc::Sender<WindowInfo>, info: WindowInfo) {
+    let sig = window_signature(&info);
+    if let Ok(mut last_sig) = window_signature_slot().lock() {
+        if last_sig.as_deref() == Some(sig.as_str()) {
+            return;
+        }
+        *last_sig = Some(sig);
+    }
+    let _ = tx.send(info);
+}
+
+fn window_signature(info: &WindowInfo) -> String {
+    format!(
+        "{}|{}|{}|{}|{}",
+        info.app_id.clone().unwrap_or_default(),
+        info.instance.clone().unwrap_or_default(),
+        info.class.clone().unwrap_or_default(),
+        info.output.clone().unwrap_or_default(),
+        info.title
+    )
+}
+
+fn reset_window_signature() {
+    if let Ok(mut last_sig) = window_signature_slot().lock() {
+        *last_sig = None;
+    }
+}
+
+fn window_signature_slot() -> &'static Mutex<Option<String>> {
+    static WINDOW_SIGNATURE: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+    WINDOW_SIGNATURE.get_or_init(|| Mutex::new(None))
 }
 
 fn window_event_slot() -> &'static Mutex<Option<mpsc::Sender<WindowInfo>>> {
