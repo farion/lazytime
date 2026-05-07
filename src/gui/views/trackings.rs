@@ -365,7 +365,11 @@ impl TrackingsView {
                                         )
                                         .show_ui(ui, |ui| {
                                             for (idx, p) in form.projects.iter().enumerate() {
-                                                ui.selectable_value(&mut form.selected_project, idx, p);
+                                                ui.selectable_value(
+                                                    &mut form.selected_project,
+                                                    idx,
+                                                    p,
+                                                );
                                             }
                                         });
                                 },
@@ -400,8 +404,8 @@ impl TrackingsView {
                                     |ui| {
                                         ui.add_sized(
                                             [DATE_FIELD_WIDTH, field_height],
-                                        DatePickerButton::new(&mut form.start_date)
-                                            .id_salt("tracking_start_date"),
+                                            DatePickerButton::new(&mut form.start_date)
+                                                .id_salt("tracking_start_date"),
                                         );
                                         style::padded_text_edit_sized_validated(
                                             ui,
@@ -439,8 +443,8 @@ impl TrackingsView {
                                         if form.end_enabled {
                                             ui.add_sized(
                                                 [DATE_FIELD_WIDTH, field_height],
-                                            DatePickerButton::new(&mut form.end_date)
-                                                .id_salt("tracking_end_date"),
+                                                DatePickerButton::new(&mut form.end_date)
+                                                    .id_salt("tracking_end_date"),
                                             );
                                             style::padded_text_edit_sized_validated(
                                                 ui,
@@ -686,8 +690,8 @@ impl TrackingsView {
             .position(|p| p == &t.project_name)
             .unwrap_or(0);
         let now_local = Local::now();
-        let (start_date, start_time) = parse_local_parts(&t.start_ts)
-            .unwrap_or((now_local.date_naive(), now_local.time()));
+        let (start_date, start_time) =
+            parse_local_parts(&t.start_ts).unwrap_or((now_local.date_naive(), now_local.time()));
         let (end_enabled, end_date, end_time) = if let Some(end_ts) = t.end_ts.as_ref() {
             if let Some((date, time)) = parse_local_parts(end_ts) {
                 (true, date, time)

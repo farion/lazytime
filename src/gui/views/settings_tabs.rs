@@ -2,9 +2,9 @@ use eframe::egui;
 use egui_dock::TabViewer;
 use egui_phosphor_icons::icons;
 
-use crate::gui::style;
-use super::{SettingsTab, SettingsView, LABEL_WIDTH};
+use super::{LABEL_WIDTH, SettingsTab, SettingsView};
 use crate::config::ThemePreference;
+use crate::gui::style;
 
 pub(super) struct SettingsTabViewer<'a> {
     pub(super) view: &'a mut SettingsView,
@@ -142,6 +142,17 @@ impl TabViewer for SettingsTabViewer<'_> {
                             "Socket endpoint used for daemon communication.",
                             LABEL_WIDTH,
                             &mut self.view.edit.ipc_socket_path,
+                        );
+                        style::setting_row(
+                            ui,
+                            "Onboarding",
+                            "Show onboarding again.",
+                            LABEL_WIDTH,
+                            |ui| {
+                                if ui.button("Show onboarding again").clicked() {
+                                    self.view.trigger_onboarding_again();
+                                }
+                            },
                         );
                     });
                 }

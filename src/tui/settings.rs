@@ -10,6 +10,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::config::{Config, ThemePreference, TimeRange};
+use crate::secrets;
 
 const WEEKDAY_NAMES: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -21,6 +22,7 @@ pub struct SettingsState {
     pub selected: usize,
     pub offset: usize,
     pub default_project: String,
+    pub onboarding_done: bool,
     pub tracking_stability_seconds: String,
     pub working_hours: BTreeMap<u8, Vec<TimeRange>>,
     pub track_reminder_seconds: String,
@@ -49,6 +51,7 @@ impl SettingsState {
             selected: 0,
             offset: 0,
             default_project: cfg.default_project.clone(),
+            onboarding_done: cfg.onboarding_done,
             tracking_stability_seconds: cfg.tracking_stability_seconds.to_string(),
             working_hours: cfg.working_hours.clone(),
             track_reminder_seconds: cfg.track_reminder_seconds.to_string(),
@@ -58,7 +61,11 @@ impl SettingsState {
             report_end: cfg.report_end.clone().unwrap_or_default(),
             db_file: cfg.db_file.clone(),
             jira_url: cfg.jira_url.clone().unwrap_or_default(),
-            jira_token: cfg.jira_token.clone().unwrap_or_default(),
+            jira_token: secrets::load_jira_token()
+                .ok()
+                .flatten()
+                .or_else(|| cfg.jira_token.clone())
+                .unwrap_or_default(),
             jira_token_masked: true,
             jira_email: cfg.jira_email.clone().unwrap_or_default(),
             jira_project: cfg.jira_project.clone().unwrap_or_default(),
@@ -191,6 +198,11 @@ impl SettingsState {
             }
             KeyCode::Char('s') => {
                 let cfg = self.to_config().map_err(|e| anyhow::anyhow!(e))?;
+                if self.jira_token.trim().is_empty() {
+                    secrets::clear_jira_token()?;
+                } else {
+                    secrets::store_jira_token(self.jira_token.trim())?;
+                }
                 let p = resolve_config_path(config_path);
                 if let Some(parent) = p.parent() {
                     fs::create_dir_all(parent)?;
@@ -460,6 +472,7 @@ impl SettingsState {
 
     fn to_config(&self) -> std::result::Result<Config, String> {
         let cfg = Config {
+            onboarding_done: self.onboarding_done,
             default_project: self.default_project.clone(),
             tracking_stability_seconds: parse_u64(
                 "tracking_stability_seconds",
@@ -482,7 +495,7 @@ impl SettingsState {
             report_end: to_opt(&self.report_end),
             db_file: self.db_file.clone(),
             jira_url: to_opt(&self.jira_url),
-            jira_token: to_opt(&self.jira_token),
+            jira_token: None,
             jira_email: to_opt(&self.jira_email),
             jira_project: to_opt(&self.jira_project),
             jira_assignee: to_opt(&self.jira_assignee),

@@ -99,7 +99,26 @@ pub fn setting_row_with_desc_color(
     description_color: Option<egui::Color32>,
     add_field: impl FnOnce(&mut egui::Ui),
 ) {
-    let row_height = text_field_height(ui).max(ui.spacing().interact_size.y);
+    setting_row_with_field_height(
+        ui,
+        label,
+        description,
+        label_width,
+        description_color,
+        text_field_height(ui),
+        add_field,
+    );
+}
+
+pub fn setting_row_with_field_height(
+    ui: &mut egui::Ui,
+    label: &str,
+    description: &str,
+    label_width: f32,
+    description_color: Option<egui::Color32>,
+    field_height: f32,
+    add_field: impl FnOnce(&mut egui::Ui),
+) {
     let has_description = !description.trim().is_empty();
 
     // Use a 2-column grid: left is fixed label width, right contains the field widget.
@@ -107,10 +126,12 @@ pub fn setting_row_with_desc_color(
         .num_columns(2)
         .spacing([8.0, 2.0])
         .show(ui, |ui| {
-            ui.set_min_height(row_height);
+            ui.set_min_height(field_height.max(ui.spacing().interact_size.y));
             // Reserve the fixed label cell and draw the text at the left edge ourselves to guarantee left alignment.
-            let (rect, _resp) =
-                ui.allocate_exact_size(egui::vec2(label_width, row_height), egui::Sense::hover());
+            let (rect, _resp) = ui.allocate_exact_size(
+                egui::vec2(label_width, field_height.max(ui.spacing().interact_size.y)),
+                egui::Sense::hover(),
+            );
             // Layout the label text constrained to the label width and paint it at the cell's left-top.
             let mut job = LayoutJob::default();
             job.append(
@@ -134,7 +155,8 @@ pub fn setting_row_with_desc_color(
 
             if has_description {
                 ui.label("");
-                let desc_color = description_color.unwrap_or_else(|| ui.visuals().weak_text_color());
+                let desc_color =
+                    description_color.unwrap_or_else(|| ui.visuals().weak_text_color());
                 ui.label(
                     egui::RichText::new(description)
                         .size(14.0)

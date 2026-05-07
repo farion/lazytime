@@ -196,7 +196,10 @@ impl DaemonView {
         let stop_msg = self.stop(config);
         let start_msg = self.start_daemon(config);
         if start_msg == "daemon running" {
-            format!("daemon restarted ({})", if self.debug_enabled { "DEBUG" } else { "INFO" })
+            format!(
+                "daemon restarted ({})",
+                if self.debug_enabled { "DEBUG" } else { "INFO" }
+            )
         } else {
             format!("{stop_msg}; {start_msg}")
         }

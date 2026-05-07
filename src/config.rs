@@ -22,6 +22,8 @@ pub struct TimeRange {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
+    #[serde(default)]
+    pub onboarding_done: bool,
     pub default_project: String,
     #[serde(default = "default_tracking_stability_seconds")]
     pub tracking_stability_seconds: u64,
@@ -194,6 +196,7 @@ fn default_config_template(config_path: &Path) -> Config {
     };
 
     Config {
+        onboarding_done: false,
         default_project: "Default".to_string(),
         tracking_stability_seconds: default_tracking_stability_seconds(),
         working_hours: BTreeMap::new(),
@@ -224,12 +227,8 @@ pub fn parse_hhmm(value: &str) -> Result<(u32, u32)> {
         bail!("minute must be two digits");
     }
 
-    let hour = hour_part
-        .parse::<u32>()
-        .context("invalid hour")?;
-    let minute = minute_part
-        .parse::<u32>()
-        .context("invalid minute")?;
+    let hour = hour_part.parse::<u32>().context("invalid hour")?;
+    let minute = minute_part.parse::<u32>().context("invalid minute")?;
     if parts.next().is_some() {
         bail!("invalid time format");
     }

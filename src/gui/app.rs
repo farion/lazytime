@@ -71,6 +71,7 @@ struct GuiApp {
     jira: views::JiraSyncView,
     daemon: views::DaemonView,
     settings: views::SettingsView,
+    onboarding: views::OnboardingView,
 }
 
 struct ToastMessage {
@@ -81,6 +82,7 @@ struct ToastMessage {
 impl GuiApp {
     fn new(config: Config, config_path: Option<String>) -> Self {
         let settings = views::SettingsView::new(&config);
+        let onboarding = views::OnboardingView::new(&config);
         let mut app = Self {
             config,
             config_path,
@@ -93,8 +95,11 @@ impl GuiApp {
             jira: views::JiraSyncView::default(),
             daemon: views::DaemonView::default(),
             settings,
+            onboarding,
         };
-        if let Some(msg) = app.daemon.auto_start_on_gui_launch(&app.config) {
+        if app.config.onboarding_done
+            && let Some(msg) = app.daemon.auto_start_on_gui_launch(&app.config)
+        {
             app.push_toast(msg);
         }
         app
@@ -219,6 +224,25 @@ impl GuiApp {
 impl eframe::App for GuiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.apply_theme(ctx);
+        if !self.config.onboarding_done {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                if let Some(msg) =
+                    self.onboarding
+                        .ui(ctx, ui, &mut self.config, self.config_path.as_deref())
+                {
+                    if self.config.onboarding_done {
+                        if let Some(start_msg) = self.daemon.auto_start_on_gui_launch(&self.config)
+                        {
+                            self.push_toast(start_msg);
+                        }
+                    }
+                    self.push_toast(msg);
+                }
+            });
+            self.draw_toast(ctx);
+            return;
+        }
+
         self.handle_global_shortcuts(ctx);
         self.daemon.poll(&self.config);
 
@@ -388,6 +412,9 @@ impl eframe::App for GuiApp {
         if self.settings.take_pref_changed() {
             self.config.theme_preference = self.settings.theme_preference.clone();
             self.config.sidebar_collapsed = self.settings.sidebar_collapsed;
+        }
+        if self.settings.take_onboarding_requested() {
+            self.onboarding = views::OnboardingView::new(&self.config);
         }
 
         if let Ok(conn) = db::open(self.config.db_path()) {

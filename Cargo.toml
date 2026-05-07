@@ -30,6 +30,8 @@ dbus = { version = "0.9", optional = true }
 winit = { version = "0.30", optional = true }
 x11rb = { version = "0.13", optional = true }
 windows = { version = "0.58", optional = true, features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_System_RemoteDesktop", "Win32_System_Threading", "Win32_UI_Accessibility", "Win32_UI_WindowsAndMessaging"] }
+keyring = { version = "3.6", features = ["apple-native", "windows-native", "sync-secret-service"] }
+whoami = "1.5"
 
 [features]
 default = ["backend-sway", "ipc-unix", "popup-ui", "popup-output-placement"]

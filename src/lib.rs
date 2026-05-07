@@ -9,6 +9,7 @@ pub mod jira_sync;
 pub mod platform;
 pub mod popup;
 pub mod rules;
+pub mod secrets;
 pub mod time;
 pub mod tui;
 

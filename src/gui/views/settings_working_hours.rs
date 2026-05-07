@@ -87,7 +87,11 @@ impl SettingsView {
                     .or(range_error.as_deref())
                 {
                     let palette = style::validation_palette(ui);
-                    ui.label(egui::RichText::new(err).size(13.0).color(palette.description));
+                    ui.label(
+                        egui::RichText::new(err)
+                            .size(13.0)
+                            .color(palette.description),
+                    );
                 }
             }
 
@@ -116,7 +120,7 @@ impl SettingsView {
                                 icons::ARROW_LINE_DOWN,
                                 "overtake from monday",
                             ))
-                                .min_size(egui::vec2(0.0, ui.spacing().interact_size.y)),
+                            .min_size(egui::vec2(0.0, ui.spacing().interact_size.y)),
                         )
                         .clicked()
                         && let Err(err) = self.overtake_ranges_from_monday(day)
@@ -135,12 +139,20 @@ impl SettingsView {
 
             if let Some(err) = action_error {
                 let palette = style::validation_palette(ui);
-                ui.label(egui::RichText::new(err).size(13.0).color(palette.description));
+                ui.label(
+                    egui::RichText::new(err)
+                        .size(13.0)
+                        .color(palette.description),
+                );
             }
 
             if let Err(err) = validate_day_ranges(self, day) {
                 let palette = style::validation_palette(ui);
-                ui.label(egui::RichText::new(err).size(13.0).color(palette.description));
+                ui.label(
+                    egui::RichText::new(err)
+                        .size(13.0)
+                        .color(palette.description),
+                );
             }
         });
     }
@@ -176,12 +188,7 @@ impl SettingsView {
             return Err("monday cannot overtake from monday".to_string());
         }
 
-        let monday_ranges = self
-            .edit
-            .working_hours
-            .get(&0)
-            .cloned()
-            .unwrap_or_default();
+        let monday_ranges = self.edit.working_hours.get(&0).cloned().unwrap_or_default();
         if monday_ranges.is_empty() {
             return Err("monday has no ranges to overtake".to_string());
         }

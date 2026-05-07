@@ -7,12 +7,13 @@ use egui_dock::{DockArea, DockState, NodeIndex, Style, SurfaceIndex, TabIndex};
 use egui_phosphor_icons::icons;
 
 use crate::config::{Config, ThemePreference, TimeRange};
+use crate::secrets;
 
 use super::super::style;
-#[path = "settings_working_hours.rs"]
-mod working_hours;
 #[path = "settings_tabs.rs"]
 mod settings_tabs;
+#[path = "settings_working_hours.rs"]
+mod working_hours;
 use settings_tabs::SettingsTabViewer;
 
 const WEEKDAY_NAMES: [&str; 7] = [
@@ -39,6 +40,8 @@ pub struct SettingsView {
     pub theme_preference: ThemePreference,
     pub sidebar_collapsed: bool,
     pref_changed: bool,
+    onboarding_requested: bool,
+    onboarding_triggered: bool,
     edit: SettingsEdit,
     selected_tab: SettingsTab,
 }
@@ -71,6 +74,8 @@ impl SettingsView {
             theme_preference: cfg.theme_preference.clone(),
             sidebar_collapsed: cfg.sidebar_collapsed,
             pref_changed: false,
+            onboarding_requested: false,
+            onboarding_triggered: false,
             edit: SettingsEdit::from_config(cfg),
             selected_tab: SettingsTab::General,
         }
@@ -125,25 +130,14 @@ impl SettingsView {
                         self.theme_preference.clone(),
                         self.sidebar_collapsed,
                     ) {
-                        Ok(next) => {
-                            let p = resolve_config_path(config_path);
-                            if let Some(parent) = p.parent() {
-                                let _ = fs::create_dir_all(parent);
+                        Ok(next) => match save_config(next, &self.edit.jira_token, config_path) {
+                            Ok((saved, path)) => {
+                                *config = saved;
+                                self.pref_changed = true;
+                                message = Some(format!("saved {}", path.display()));
                             }
-                            match serde_json::to_string_pretty(&next) {
-                                Ok(json) => {
-                                    if fs::write(&p, json).is_ok() {
-                                        *config = next;
-                                        self.pref_changed = true;
-                                        message = Some(format!("saved {}", p.display()));
-                                    } else {
-                                        message =
-                                            Some(format!("error: failed to write {}", p.display()));
-                                    }
-                                }
-                                Err(err) => message = Some(format!("error: {err}")),
-                            }
-                        }
+                            Err(err) => message = Some(format!("error: {err}")),
+                        },
                         Err(err) => message = Some(err),
                     }
                 }
@@ -185,6 +179,11 @@ impl SettingsView {
             self.selected_tab = active_tab;
         }
 
+        if self.onboarding_triggered {
+            self.onboarding_triggered = false;
+            message = Some(self.request_onboarding(config, config_path));
+        }
+
         message
     }
 
@@ -194,17 +193,48 @@ impl SettingsView {
         v
     }
 
+    pub fn take_onboarding_requested(&mut self) -> bool {
+        let v = self.onboarding_requested;
+        self.onboarding_requested = false;
+        v
+    }
+
+    pub fn request_onboarding(&mut self, config: &mut Config, config_path: Option<&str>) -> String {
+        let mut next = config.clone();
+        next.onboarding_done = false;
+        match save_config(next, &self.edit.jira_token, config_path) {
+            Ok((saved, _)) => {
+                *config = saved;
+                self.edit = SettingsEdit::from_config(config);
+                self.pref_changed = true;
+                self.onboarding_requested = true;
+                "onboarding started".to_string()
+            }
+            Err(err) => format!("error: {err}"),
+        }
+    }
+
     fn has_unsaved_changes(&self, config: &Config) -> bool {
-        let Ok(next) = self
-            .edit
-            .to_config(config, self.theme_preference.clone(), self.sidebar_collapsed)
-        else {
+        let Ok(next) = self.edit.to_config(
+            config,
+            self.theme_preference.clone(),
+            self.sidebar_collapsed,
+        ) else {
             return true;
         };
-        match (serde_json::to_value(&next), serde_json::to_value(config)) {
+        let cfg_diff = match (serde_json::to_value(&next), serde_json::to_value(config)) {
             (Ok(a), Ok(b)) => a != b,
             _ => true,
+        };
+        if cfg_diff {
+            return true;
         }
+        let stored_token = secrets::load_jira_token()
+            .ok()
+            .flatten()
+            .or_else(|| config.jira_token.clone())
+            .unwrap_or_default();
+        self.edit.jira_token.trim() != stored_token.trim()
     }
 }
 
@@ -232,7 +262,11 @@ impl SettingsEdit {
             report_end: cfg.report_end.clone().unwrap_or_default(),
             db_file: cfg.db_file.clone(),
             jira_url: cfg.jira_url.clone().unwrap_or_default(),
-            jira_token: cfg.jira_token.clone().unwrap_or_default(),
+            jira_token: secrets::load_jira_token()
+                .ok()
+                .flatten()
+                .or_else(|| cfg.jira_token.clone())
+                .unwrap_or_default(),
             jira_token_masked: true,
             jira_email: cfg.jira_email.clone().unwrap_or_default(),
             jira_project: cfg.jira_project.clone().unwrap_or_default(),
@@ -250,6 +284,7 @@ impl SettingsEdit {
         sidebar_collapsed: bool,
     ) -> Result<Config, String> {
         let next = Config {
+            onboarding_done: cfg.onboarding_done,
             default_project: self.default_project.clone(),
             tracking_stability_seconds: parse_u64(
                 "tracking_stability_seconds",
@@ -272,7 +307,7 @@ impl SettingsEdit {
             report_end: to_opt(&self.report_end),
             db_file: self.db_file.clone(),
             jira_url: to_opt(&self.jira_url),
-            jira_token: to_opt(&self.jira_token),
+            jira_token: None,
             jira_email: to_opt(&self.jira_email),
             jira_project: to_opt(&self.jira_project),
             jira_assignee: to_opt(&self.jira_assignee),
@@ -285,6 +320,12 @@ impl SettingsEdit {
         next.validate().map_err(|e| e.to_string())?;
         let _ = cfg;
         Ok(next)
+    }
+}
+
+impl SettingsView {
+    pub(crate) fn trigger_onboarding_again(&mut self) {
+        self.onboarding_triggered = true;
     }
 }
 
@@ -303,7 +344,26 @@ fn to_opt(raw: &str) -> Option<String> {
     }
 }
 
-fn resolve_config_path(config_path: Option<&str>) -> PathBuf {
+fn save_config(
+    next: Config,
+    jira_token: &str,
+    config_path: Option<&str>,
+) -> Result<(Config, PathBuf), String> {
+    if jira_token.trim().is_empty() {
+        secrets::clear_jira_token().map_err(|e| e.to_string())?;
+    } else {
+        secrets::store_jira_token(jira_token).map_err(|e| e.to_string())?;
+    }
+    let p = resolve_config_path(config_path);
+    if let Some(parent) = p.parent() {
+        fs::create_dir_all(parent).map_err(|_| format!("failed to create {}", parent.display()))?;
+    }
+    let json = serde_json::to_string_pretty(&next).map_err(|e| e.to_string())?;
+    fs::write(&p, json).map_err(|_| format!("failed to write {}", p.display()))?;
+    Ok((next, p))
+}
+
+pub(crate) fn resolve_config_path(config_path: Option<&str>) -> PathBuf {
     if let Some(path) = config_path {
         return PathBuf::from(path);
     }
