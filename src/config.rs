@@ -218,14 +218,16 @@ fn default_config_template(config_path: &Path) -> Config {
 
 pub fn parse_hhmm(value: &str) -> Result<(u32, u32)> {
     let mut parts = value.split(':');
-    let hour = parts
-        .next()
-        .context("missing hour")?
+    let hour_part = parts.next().context("missing hour")?;
+    let minute_part = parts.next().context("missing minute")?;
+    if minute_part.len() != 2 {
+        bail!("minute must be two digits");
+    }
+
+    let hour = hour_part
         .parse::<u32>()
         .context("invalid hour")?;
-    let minute = parts
-        .next()
-        .context("missing minute")?
+    let minute = minute_part
         .parse::<u32>()
         .context("invalid minute")?;
     if parts.next().is_some() {

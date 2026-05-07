@@ -152,6 +152,8 @@ impl GuiApp {
             ThemePreference::Dark => egui::ThemePreference::Dark,
         };
         ctx.set_theme(pref);
+        // Keep layout metrics identical across light/dark; only visuals should change.
+        style::apply_base_style(ctx);
     }
 
     fn set_mode(&mut self, mode: ViewMode) {
@@ -159,6 +161,10 @@ impl GuiApp {
     }
 
     fn handle_global_shortcuts(&mut self, ctx: &egui::Context) {
+        if ctx.wants_keyboard_input() {
+            return;
+        }
+
         if ctx.input(|i| i.key_pressed(egui::Key::C)) {
             self.set_mode(ViewMode::Current);
         }

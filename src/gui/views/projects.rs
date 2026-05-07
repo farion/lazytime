@@ -57,6 +57,7 @@ impl ProjectsView {
         }
 
         let mut message = None;
+        let has_projects = !projects.is_empty();
 
         self.handle_keys(ctx, &projects, &conn);
 
@@ -68,7 +69,10 @@ impl ProjectsView {
                 self.project_modal = Some(ProjectForm::default());
             }
             if ui
-                .button(style::icon_label(ui, icons::PENCIL_SIMPLE, "Edit"))
+                .add_enabled(
+                    has_projects,
+                    egui::Button::new(style::icon_label(ui, icons::PENCIL_SIMPLE, "Edit")),
+                )
                 .clicked()
             {
                 if let Some(p) = projects.get(self.selected_project) {
@@ -80,7 +84,10 @@ impl ProjectsView {
                 }
             }
             if ui
-                .button(style::icon_label(ui, icons::TRASH_SIMPLE, "Delete"))
+                .add_enabled(
+                    has_projects,
+                    egui::Button::new(style::icon_label(ui, icons::TRASH_SIMPLE, "Delete")),
+                )
                 .clicked()
             {
                 if let Some(p) = projects.get(self.selected_project) {
@@ -88,7 +95,10 @@ impl ProjectsView {
                 }
             }
             if ui
-                .button(style::icon_label(ui, icons::LIST_BULLETS, "Rules"))
+                .add_enabled(
+                    has_projects,
+                    egui::Button::new(style::icon_label(ui, icons::LIST_BULLETS, "Rules")),
+                )
                 .clicked()
             {
                 self.rules_modal_open = true;
@@ -437,10 +447,15 @@ impl ProjectsView {
         if self.selected_rule >= rules.len() {
             self.selected_rule = rules.len().saturating_sub(1);
         }
+        let can_add_rule = selected.is_some();
+        let can_edit_rule = !rules.is_empty();
 
         ui.horizontal(|ui| {
             if ui
-                .button(style::icon_label(ui, icons::PLUS, "Add"))
+                .add_enabled(
+                    can_add_rule,
+                    egui::Button::new(style::icon_label(ui, icons::PLUS, "Add")),
+                )
                 .clicked()
             {
                 if let Some(p) = selected.as_ref() {
@@ -454,7 +469,10 @@ impl ProjectsView {
                 }
             }
             if ui
-                .button(style::icon_label(ui, icons::PENCIL_SIMPLE, "Edit"))
+                .add_enabled(
+                    can_edit_rule,
+                    egui::Button::new(style::icon_label(ui, icons::PENCIL_SIMPLE, "Edit")),
+                )
                 .clicked()
             {
                 if let Some(p) = selected.as_ref() {
@@ -470,7 +488,10 @@ impl ProjectsView {
                 }
             }
             if ui
-                .button(style::icon_label(ui, icons::TRASH_SIMPLE, "Delete"))
+                .add_enabled(
+                    can_edit_rule,
+                    egui::Button::new(style::icon_label(ui, icons::TRASH_SIMPLE, "Delete")),
+                )
                 .clicked()
             {
                 if let Some(r) = rules.get(self.selected_rule) {

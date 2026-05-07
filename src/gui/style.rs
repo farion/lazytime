@@ -3,12 +3,16 @@ use eframe::egui::text::LayoutJob;
 
 pub const BUTTON_PAD_X: i8 = 8;
 pub const BUTTON_PAD_Y: i8 = 5;
-pub const TEXT_PAD_X: i8 = 8;
-pub const TEXT_PAD_Y: i8 = 4;
+pub const TEXT_PAD_X: i8 = 12;
+pub const TEXT_PAD_Y: i8 = 8;
 pub const FIELD_BLOCK_MARGIN: i8 = 5;
 pub const DIALOG_MARGIN: i8 = 5;
 pub const SIDEBAR_EXPANDED: f32 = 180.0;
 pub const SIDEBAR_COLLAPSED: f32 = 56.0;
+
+pub fn text_field_height(ui: &egui::Ui) -> f32 {
+    ui.text_style_height(&egui::TextStyle::Body) + (TEXT_PAD_Y as f32 * 2.0) + 2.0
+}
 
 pub fn apply_base_style(ctx: &egui::Context) {
     ctx.style_mut(|style| {
@@ -24,12 +28,45 @@ pub fn padded_text_edit(ui: &mut egui::Ui, value: &mut String) -> egui::Response
     )
 }
 
+pub fn padded_text_edit_sized_validated(
+    ui: &mut egui::Ui,
+    value: &mut String,
+    width: f32,
+    error: Option<&str>,
+) -> egui::Response {
+    let field_height = text_field_height(ui);
+    let mut edit =
+        egui::TextEdit::singleline(value).margin(egui::Margin::symmetric(TEXT_PAD_X, TEXT_PAD_Y));
+    if error.is_some() {
+        let palette = validation_palette(ui);
+        edit = edit
+            .text_color(palette.text)
+            .background_color(palette.background);
+    }
+    ui.add_sized([width, field_height], edit)
+}
+
 pub fn padded_text_edit_fill(ui: &mut egui::Ui, value: &mut String) -> egui::Response {
-    let field_height = ui.spacing().interact_size.y + (TEXT_PAD_Y as f32 * 2.0);
+    let field_height = text_field_height(ui);
     ui.add_sized(
         [ui.available_width(), field_height],
         egui::TextEdit::singleline(value).margin(egui::Margin::symmetric(TEXT_PAD_X, TEXT_PAD_Y)),
     )
+}
+
+pub struct ValidationPalette {
+    pub text: egui::Color32,
+    pub background: egui::Color32,
+    pub description: egui::Color32,
+}
+
+pub fn validation_palette(ui: &egui::Ui) -> ValidationPalette {
+    let text = ui.visuals().error_fg_color;
+    ValidationPalette {
+        text,
+        background: text.linear_multiply(0.16),
+        description: text.linear_multiply(0.9),
+    }
 }
 
 pub fn setting_text_row(
@@ -44,18 +81,6 @@ pub fn setting_text_row(
     });
 }
 
-pub fn setting_readonly_row(
-    ui: &mut egui::Ui,
-    label: &str,
-    description: &str,
-    label_width: f32,
-    value: &str,
-) {
-    setting_row(ui, label, description, label_width, |ui| {
-        ui.label(value);
-    });
-}
-
 pub fn setting_row(
     ui: &mut egui::Ui,
     label: &str,
@@ -63,12 +88,24 @@ pub fn setting_row(
     label_width: f32,
     add_field: impl FnOnce(&mut egui::Ui),
 ) {
-    let row_height = ui.spacing().interact_size.y + (TEXT_PAD_Y as f32 * 2.0);
+    setting_row_with_desc_color(ui, label, description, label_width, None, add_field);
+}
+
+pub fn setting_row_with_desc_color(
+    ui: &mut egui::Ui,
+    label: &str,
+    description: &str,
+    label_width: f32,
+    description_color: Option<egui::Color32>,
+    add_field: impl FnOnce(&mut egui::Ui),
+) {
+    let row_height = text_field_height(ui).max(ui.spacing().interact_size.y);
+    let has_description = !description.trim().is_empty();
 
     // Use a 2-column grid: left is fixed label width, right contains the field widget.
     egui::Grid::new(format!("setting_row_{}", label))
         .num_columns(2)
-        .spacing([8.0, 4.0])
+        .spacing([8.0, 2.0])
         .show(ui, |ui| {
             ui.set_min_height(row_height);
             // Reserve the fixed label cell and draw the text at the left edge ourselves to guarantee left alignment.
@@ -94,17 +131,22 @@ pub fn setting_row(
             ));
             add_field(ui);
             ui.end_row();
+
+            if has_description {
+                ui.label("");
+                let desc_color = description_color.unwrap_or_else(|| ui.visuals().weak_text_color());
+                ui.label(
+                    egui::RichText::new(description)
+                        .size(14.0)
+                        .color(desc_color),
+                );
+                ui.end_row();
+            }
         });
 
-    ui.horizontal(|ui| {
-        ui.add_space(label_width + ui.spacing().item_spacing.x);
-        ui.label(
-            egui::RichText::new(description)
-                .size(14.0)
-                .color(ui.visuals().weak_text_color()),
-        );
-    });
-    ui.add_space(8.0);
+    if has_description {
+        ui.add_space(10.0);
+    }
 }
 
 pub fn icon_label(ui: &egui::Ui, icon: egui_phosphor_icons::Icon, label: &str) -> egui::WidgetText {

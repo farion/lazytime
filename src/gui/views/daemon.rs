@@ -29,6 +29,7 @@ pub struct DaemonView {
     child: Option<Child>,
     receiver: Option<Receiver<String>>,
     status: Option<DaemonStatus>,
+    debug_enabled: bool,
 }
 
 impl DaemonView {
@@ -65,20 +66,38 @@ impl DaemonView {
     pub fn ui(&mut self, ui: &mut egui::Ui, config: &Config) -> Option<String> {
         let mut message = None;
         let status = self.compute_status(config);
+        let can_start = status == DaemonStatus::Stopped;
+        let can_stop = status != DaemonStatus::Stopped;
         ui.horizontal(|ui| {
             ui.label(format!("status: {}", self.status_text(config)));
             if ui
-                .button(style::icon_label(ui, icons::PLAY, "Start"))
+                .add_enabled(
+                    can_start,
+                    egui::Button::new(style::icon_label(ui, icons::PLAY, "Start")),
+                )
                 .clicked()
             {
                 message = Some(self.start_daemon(config));
             }
             if ui
-                .button(style::icon_label(ui, icons::STOP, "Stop"))
+                .add_enabled(
+                    can_stop,
+                    egui::Button::new(style::icon_label(ui, icons::STOP, "Stop")),
+                )
                 .clicked()
             {
                 message = Some(self.stop(config));
             }
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let changed = ui
+                    .checkbox(&mut self.debug_enabled, "DEBUG")
+                    .on_hover_text("Run daemon with --loglevel=DEBUG")
+                    .changed();
+                if changed && status != DaemonStatus::Stopped {
+                    message = Some(self.restart_daemon(config));
+                }
+            });
         });
 
         if status == DaemonStatus::Outside {
@@ -128,7 +147,10 @@ impl DaemonView {
         };
 
         let mut cmd = Command::new(exe);
+        let loglevel = if self.debug_enabled { "DEBUG" } else { "INFO" };
         cmd.arg("--daemon")
+            .arg("--loglevel")
+            .arg(loglevel)
             .env("LAZYTIME_DAEMON_OWNER", self.owner_id.clone())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -164,8 +186,18 @@ impl DaemonView {
 
         self.child = Some(child);
         self.receiver = Some(rx);
-        self.push_log("daemon process started".to_string());
+        self.push_log(format!("daemon process started (loglevel={loglevel})"));
         "daemon running".to_string()
+    }
+
+    fn restart_daemon(&mut self, config: &Config) -> String {
+        let stop_msg = self.stop(config);
+        let start_msg = self.start_daemon(config);
+        if start_msg == "daemon running" {
+            format!("daemon restarted ({})", if self.debug_enabled { "DEBUG" } else { "INFO" })
+        } else {
+            format!("{stop_msg}; {start_msg}")
+        }
     }
 
     fn stop(&mut self, config: &Config) -> String {
@@ -340,7 +372,21 @@ fn extract_log_message(raw: &str) -> String {
         break;
     }
 
-    rest.trim().to_string()
+    let message = rest.trim();
+    if looks_like_noise(message) {
+        return text.to_string();
+    }
+    message.to_string()
+}
+
+fn looks_like_noise(message: &str) -> bool {
+    if message.is_empty() {
+        return true;
+    }
+    if message.len() > 3 {
+        return false;
+    }
+    message.chars().all(|c| !c.is_ascii_alphanumeric())
 }
 
 fn split_after_level(input: &str) -> Option<(&str, &str)> {

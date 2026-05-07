@@ -2,7 +2,6 @@ use chrono::{Duration, Local, NaiveDate, NaiveTime, Timelike};
 use eframe::egui;
 use egui_extras::DatePickerButton;
 use egui_phosphor_icons::icons;
-use egui_timepicker::TimePickerButton;
 
 use crate::config::Config;
 use crate::db;
@@ -14,6 +13,8 @@ use super::super::style;
 use super::super::table::{self, RowAction};
 
 const DIALOG_LABEL_WIDTH: f32 = 110.0;
+const DATE_FIELD_WIDTH: f32 = 124.0;
+const TIME_FIELD_WIDTH: f32 = 96.0;
 
 #[derive(Default)]
 pub struct TrackingsView {
@@ -31,10 +32,10 @@ struct TrackingForm {
     id: Option<i64>,
     project_name: String,
     start_date: NaiveDate,
-    start_time: NaiveTime,
+    start_time: String,
     end_enabled: bool,
     end_date: NaiveDate,
-    end_time: NaiveTime,
+    end_time: String,
     description: String,
     synced: bool,
     projects: Vec<String>,
@@ -71,6 +72,9 @@ impl TrackingsView {
         let mut message = None;
         self.handle_keys(ctx, &rows, &conn, config, &mut message);
 
+        let selected_tracking = matches!(rows.get(self.selected), Some(DisplayRow::Tracking(_)));
+        let selected_tracking_unsynced = selected_tracking && !self.selected_tracking_synced(&rows);
+
         ui.horizontal(|ui| {
             if ui
                 .button(style::icon_label(ui, icons::PLUS, "Add"))
@@ -79,7 +83,10 @@ impl TrackingsView {
                 self.edit_modal = Some(self.new_form(&conn, None));
             }
             if ui
-                .button(style::icon_label(ui, icons::PENCIL_SIMPLE, "Edit"))
+                .add_enabled(
+                    selected_tracking_unsynced,
+                    egui::Button::new(style::icon_label(ui, icons::PENCIL_SIMPLE, "Edit")),
+                )
                 .clicked()
             {
                 if let Some(form) = self.form_from_selected(&rows, &conn) {
@@ -89,7 +96,10 @@ impl TrackingsView {
                 }
             }
             if ui
-                .button(style::icon_label(ui, icons::TRASH_SIMPLE, "Delete"))
+                .add_enabled(
+                    selected_tracking_unsynced,
+                    egui::Button::new(style::icon_label(ui, icons::TRASH_SIMPLE, "Delete")),
+                )
                 .clicked()
                 && let Some(id) = self.selected_tracking_id(&rows)
             {
@@ -132,7 +142,10 @@ impl TrackingsView {
                 }
             }
             if ui
-                .button(style::icon_label(ui, icons::ARROW_U_DOWN_LEFT, "Storno"))
+                .add_enabled(
+                    selected_tracking,
+                    egui::Button::new(style::icon_label(ui, icons::ARROW_U_DOWN_LEFT, "Storno")),
+                )
                 .clicked()
                 && let Some(DisplayRow::Tracking(t)) = rows.get(self.selected)
             {
@@ -186,6 +199,10 @@ impl TrackingsView {
 
         if self.filter_modal {
             let esc_pressed = ctx.input(|i| i.key_pressed(egui::Key::Escape));
+            let today = Local::now().date_naive();
+            let parse_day = |s: &str| NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").ok();
+            let mut start_date = parse_day(&self.filter_start).unwrap_or(today);
+            let mut end_date = parse_day(&self.filter_end).unwrap_or(start_date);
             style::draw_modal_backdrop(ctx);
             egui::Window::new("Filter")
                 .order(egui::Order::Foreground)
@@ -196,21 +213,36 @@ impl TrackingsView {
                     egui::Frame::new()
                         .inner_margin(egui::Margin::same(style::DIALOG_MARGIN))
                         .show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label("Start");
-                                style::padded_text_edit(ui, &mut self.filter_start);
+                            style::setting_row(ui, "Start", "", DIALOG_LABEL_WIDTH, |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.set_min_height(style::text_field_height(ui));
+                                    ui.add_sized(
+                                        [DATE_FIELD_WIDTH, style::text_field_height(ui)],
+                                        DatePickerButton::new(&mut start_date)
+                                            .id_salt("trackings_filter_start_date"),
+                                    );
+                                });
                             });
-                            ui.horizontal(|ui| {
-                                ui.label("End");
-                                style::padded_text_edit(ui, &mut self.filter_end);
+
+                            style::setting_row(ui, "End", "", DIALOG_LABEL_WIDTH, |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.set_min_height(style::text_field_height(ui));
+                                    ui.add_sized(
+                                        [DATE_FIELD_WIDTH, style::text_field_height(ui)],
+                                        DatePickerButton::new(&mut end_date)
+                                            .id_salt("trackings_filter_end_date"),
+                                    );
+                                });
                             });
+
+                            self.filter_start = start_date.format("%Y-%m-%d").to_string();
+                            self.filter_end = end_date.format("%Y-%m-%d").to_string();
+
                             ui.separator();
                             ui.horizontal(|ui| {
                                 if ui.button("Today").clicked() {
-                                    let today =
-                                        Local::now().date_naive().format("%Y-%m-%d").to_string();
-                                    self.filter_start = today.clone();
-                                    self.filter_end = today;
+                                    self.filter_start = today.format("%Y-%m-%d").to_string();
+                                    self.filter_end = self.filter_start.clone();
                                     self.filter_modal = false;
                                     self.selected = 0;
                                 }
@@ -218,6 +250,8 @@ impl TrackingsView {
                                     .button(style::icon_label(ui, icons::CHECK, "OK"))
                                     .clicked()
                                 {
+                                    self.filter_start = start_date.format("%Y-%m-%d").to_string();
+                                    self.filter_end = end_date.format("%Y-%m-%d").to_string();
                                     self.filter_modal = false;
                                     self.selected = 0;
                                 }
@@ -236,6 +270,8 @@ impl TrackingsView {
         if let Some(mut form) = self.edit_modal.clone() {
             let mut keep_modal_open = true;
             let esc_pressed = ctx.input(|i| i.key_pressed(egui::Key::Escape));
+            let esc_closes_dialog =
+                esc_pressed && !egui::Popup::is_any_open(ctx) && !ctx.wants_keyboard_input();
             style::draw_modal_backdrop(ctx);
             egui::Window::new(if form.id.is_some() {
                 "Edit tracking"
@@ -287,57 +323,86 @@ impl TrackingsView {
                                 &mut form.project_name,
                             );
                         }
-                        style::setting_row(
+                        let start_error = validate_hhmm_text(&form.start_time, "start");
+                        style::setting_row_with_desc_color(
                             ui,
                             "Start",
-                            "Pick local start date and time.",
+                            start_error
+                                .as_deref()
+                                .unwrap_or("Pick local start date and time (HH:mm)."),
                             DIALOG_LABEL_WIDTH,
+                            start_error
+                                .as_ref()
+                                .map(|_| style::validation_palette(ui).description),
                             |ui| {
-                                ui.horizontal(|ui| {
-                                    ui.add(
+                                let field_height = style::text_field_height(ui);
+                                ui.with_layout(
+                                    egui::Layout::left_to_right(egui::Align::Center),
+                                    |ui| {
+                                        ui.add_sized(
+                                            [DATE_FIELD_WIDTH, field_height],
                                         DatePickerButton::new(&mut form.start_date)
-                                            .id_salt("tracking_start_date")
-                                            .show_icon(false),
-                                    );
-                                    ui.add(
-                                        TimePickerButton::new(&mut form.start_time)
-                                            .id_salt("tracking_start_time")
-                                            .show_icon(false)
-                                            .show_seconds(false),
-                                    );
-                                });
+                                            .id_salt("tracking_start_date"),
+                                        );
+                                        style::padded_text_edit_sized_validated(
+                                            ui,
+                                            &mut form.start_time,
+                                            TIME_FIELD_WIDTH,
+                                            start_error.as_deref(),
+                                        );
+                                    },
+                                );
                             },
                         );
-                        style::setting_row(
+
+                        let end_error = if form.end_enabled {
+                            validate_hhmm_text(&form.end_time, "end")
+                                .or_else(|| validate_end_after_start(&form))
+                        } else {
+                            None
+                        };
+                        style::setting_row_with_desc_color(
                             ui,
                             "End",
-                            "Optional local end date and time.",
+                            end_error
+                                .as_deref()
+                                .unwrap_or("Optional local end date and time (HH:mm)."),
                             DIALOG_LABEL_WIDTH,
+                            end_error
+                                .as_ref()
+                                .map(|_| style::validation_palette(ui).description),
                             |ui| {
-                                ui.horizontal(|ui| {
-                                    ui.checkbox(&mut form.end_enabled, "Set");
-                                    if form.end_enabled {
-                                        ui.add(
+                                let field_height = style::text_field_height(ui);
+                                ui.with_layout(
+                                    egui::Layout::left_to_right(egui::Align::Center),
+                                    |ui| {
+                                        ui.checkbox(&mut form.end_enabled, "");
+                                        if form.end_enabled {
+                                            ui.add_sized(
+                                                [DATE_FIELD_WIDTH, field_height],
                                             DatePickerButton::new(&mut form.end_date)
-                                                .id_salt("tracking_end_date")
-                                                .show_icon(false),
-                                        );
-                                        ui.add(
-                                            TimePickerButton::new(&mut form.end_time)
-                                                .id_salt("tracking_end_time")
-                                                .show_icon(false)
-                                                .show_seconds(false),
-                                        );
-                                    }
-                                });
+                                                .id_salt("tracking_end_date"),
+                                            );
+                                            style::padded_text_edit_sized_validated(
+                                                ui,
+                                                &mut form.end_time,
+                                                TIME_FIELD_WIDTH,
+                                                end_error.as_deref(),
+                                            );
+                                        }
+                                    },
+                                );
                             },
                         );
-                        style::setting_text_row(
+
+                        style::setting_row(
                             ui,
                             "Description",
                             "Optional notes.",
                             DIALOG_LABEL_WIDTH,
-                            &mut form.description,
+                            |ui| {
+                                style::padded_text_edit_fill(ui, &mut form.description);
+                            },
                         );
                         style::setting_row(
                             ui,
@@ -345,7 +410,7 @@ impl TrackingsView {
                             "Whether already synced to Jira.",
                             DIALOG_LABEL_WIDTH,
                             |ui| {
-                                ui.checkbox(&mut form.synced, "Enabled");
+                                ui.checkbox(&mut form.synced, "");
                             },
                         );
                         ui.separator();
@@ -372,7 +437,7 @@ impl TrackingsView {
                             if ui
                                 .button(style::icon_label(ui, icons::X, "Cancel"))
                                 .clicked()
-                                || esc_pressed
+                                || esc_closes_dialog
                             {
                                 keep_modal_open = false;
                             }
@@ -514,10 +579,10 @@ impl TrackingsView {
             id: None,
             project_name: projects.first().cloned().unwrap_or_default(),
             start_date: Local::now().date_naive(),
-            start_time: Local::now().time(),
+            start_time: format_hhmm(Local::now().time()),
             end_enabled: false,
             end_date: Local::now().date_naive(),
-            end_time: Local::now().time(),
+            end_time: format_hhmm(Local::now().time()),
             description: String::new(),
             synced: false,
             projects,
@@ -526,12 +591,12 @@ impl TrackingsView {
         if let Some(DisplayRow::Gap(g)) = row {
             if let Some((start_date, start_time)) = parse_local_parts(&g.start_ts) {
                 form.start_date = start_date;
-                form.start_time = start_time;
+                form.start_time = format_hhmm(start_time);
             }
             if let Some((end_date, end_time)) = parse_local_parts(&g.end_ts) {
                 form.end_enabled = true;
                 form.end_date = end_date;
-                form.end_time = end_time;
+                form.end_time = format_hhmm(end_time);
             }
             if let Some(idx) = form.projects.iter().position(|p| p == &g.after_project) {
                 form.selected_project = idx;
@@ -577,10 +642,10 @@ impl TrackingsView {
             id: Some(t.id),
             project_name: t.project_name.clone(),
             start_date,
-            start_time,
+            start_time: format_hhmm(start_time),
             end_enabled,
             end_date,
-            end_time,
+            end_time: format_hhmm(end_time),
             description: t.notes.clone().unwrap_or_default(),
             synced: t.jira_synced != 0,
             projects,
@@ -716,11 +781,13 @@ fn save_form(conn: &rusqlite::Connection, form: &TrackingForm) -> Result<String,
     if project.is_empty() {
         return Err("project must not be empty".to_string());
     }
-    let start = compose_local_ts(form.start_date, form.start_time)
+    let start_time = parse_hhmm_text(&form.start_time, "start")?;
+    let start = compose_local_ts(form.start_date, start_time)
         .ok_or_else(|| "invalid start timestamp".to_string())?;
     let end = if form.end_enabled {
+        let end_time = parse_hhmm_text(&form.end_time, "end")?;
         Some(
-            compose_local_ts(form.end_date, form.end_time)
+            compose_local_ts(form.end_date, end_time)
                 .ok_or_else(|| "invalid end timestamp".to_string())?,
         )
     } else {
@@ -755,13 +822,39 @@ fn parse_local_parts(raw: &str) -> Option<(NaiveDate, NaiveTime)> {
     Some((dt.date_naive(), dt.time()))
 }
 
+fn format_hhmm(time: NaiveTime) -> String {
+    time.format("%H:%M").to_string()
+}
+
+fn parse_hhmm_text(raw: &str, label: &str) -> Result<NaiveTime, String> {
+    let (hour, minute) = crate::config::parse_hhmm(raw)
+        .map_err(|_| format!("invalid {} time; expected HH:mm", label))?;
+    NaiveTime::from_hms_opt(hour, minute, 0)
+        .ok_or_else(|| format!("invalid {} time; expected HH:mm", label))
+}
+
+fn validate_hhmm_text(raw: &str, label: &str) -> Option<String> {
+    parse_hhmm_text(raw, label).err()
+}
+
+fn validate_end_after_start(form: &TrackingForm) -> Option<String> {
+    let start_time = parse_hhmm_text(&form.start_time, "start").ok()?;
+    let end_time = parse_hhmm_text(&form.end_time, "end").ok()?;
+    let start = compose_local_ts(form.start_date, start_time)?;
+    let end = compose_local_ts(form.end_date, end_time)?;
+    if end <= start {
+        Some("end must be after start".to_string())
+    } else {
+        None
+    }
+}
+
 fn compose_local_ts(date: NaiveDate, time: NaiveTime) -> Option<chrono::DateTime<chrono::Utc>> {
     let raw = format!(
-        "{} {:02}:{:02}:{:02}",
+        "{} {:02}:{:02}:00",
         date.format("%Y-%m-%d"),
         time.hour(),
-        time.minute(),
-        time.second()
+        time.minute()
     );
     crate::time::parse_local_ts(&raw).ok()
 }

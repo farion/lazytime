@@ -8,6 +8,8 @@ use std::thread;
 use eframe::egui;
 #[cfg(all(feature = "popup-ui", target_os = "linux"))]
 use winit::platform::wayland::EventLoopBuilderExtWayland;
+#[cfg(all(feature = "popup-ui", target_os = "windows"))]
+use winit::platform::windows::EventLoopBuilderExtWindows;
 #[cfg(all(feature = "popup-ui", target_os = "linux"))]
 use winit::platform::x11::EventLoopBuilderExtX11;
 
@@ -360,13 +362,20 @@ fn popup_native_options(title: &str, size: [f32; 2]) -> eframe::NativeOptions {
     };
 
     #[cfg(not(target_os = "linux"))]
-    let options = eframe::NativeOptions {
+    let mut options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title(title)
             .with_always_on_top()
             .with_inner_size(size),
         ..Default::default()
     };
+
+    #[cfg(target_os = "windows")]
+    {
+        options.event_loop_builder = Some(Box::new(move |builder| {
+            EventLoopBuilderExtWindows::with_any_thread(builder, true);
+        }));
+    }
 
     #[cfg(target_os = "linux")]
     {

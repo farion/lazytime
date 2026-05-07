@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
-use std::time::Instant;
 
 use eframe::egui;
+use egui_dock::{DockArea, DockState, NodeIndex, Style, SurfaceIndex, TabIndex};
 use egui_phosphor_icons::icons;
 
 use crate::config::{Config, ThemePreference, TimeRange};
@@ -11,9 +11,28 @@ use crate::config::{Config, ThemePreference, TimeRange};
 use super::super::style;
 #[path = "settings_working_hours.rs"]
 mod working_hours;
+#[path = "settings_tabs.rs"]
+mod settings_tabs;
+use settings_tabs::SettingsTabViewer;
 
-const WEEKDAY_NAMES: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const WEEKDAY_NAMES: [&str; 7] = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+];
 const LABEL_WIDTH: f32 = 210.0;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum SettingsTab {
+    General,
+    Appearance,
+    Jira,
+    WorkingHours,
+}
 
 #[derive(Clone)]
 pub struct SettingsView {
@@ -21,11 +40,7 @@ pub struct SettingsView {
     pub sidebar_collapsed: bool,
     pref_changed: bool,
     edit: SettingsEdit,
-    working_hours_modal: bool,
-    working_hours_overlay: Option<(u8, usize)>,
-    working_hours_overlay_pos: Option<egui::Pos2>,
-    working_hours_last_edit_at: Option<Instant>,
-    working_hours_last_error: Option<String>,
+    selected_tab: SettingsTab,
 }
 
 #[derive(Clone)]
@@ -57,11 +72,7 @@ impl SettingsView {
             sidebar_collapsed: cfg.sidebar_collapsed,
             pref_changed: false,
             edit: SettingsEdit::from_config(cfg),
-            working_hours_modal: false,
-            working_hours_overlay: None,
-            working_hours_overlay_pos: None,
-            working_hours_last_edit_at: None,
-            working_hours_last_error: None,
+            selected_tab: SettingsTab::General,
         }
     }
 
@@ -73,8 +84,9 @@ impl SettingsView {
         config_path: Option<&str>,
     ) -> Option<String> {
         let mut message = None;
+        let has_changes = self.has_unsaved_changes(config);
 
-        if ctx.input(|i| i.key_pressed(egui::Key::R)) {
+        if has_changes && ctx.input(|i| i.key_pressed(egui::Key::R)) {
             self.edit = SettingsEdit::from_config(config);
             self.theme_preference = config.theme_preference.clone();
             self.sidebar_collapsed = config.sidebar_collapsed;
@@ -84,9 +96,12 @@ impl SettingsView {
 
         ui.horizontal(|ui| {
             if ui
-                .button(style::icon_label(ui, icons::FLOPPY_DISK, "Save"))
+                .add_enabled(
+                    has_changes,
+                    egui::Button::new(style::icon_label(ui, icons::FLOPPY_DISK, "Save")),
+                )
                 .clicked()
-                || ctx.input(|i| i.key_pressed(egui::Key::S))
+                || (has_changes && ctx.input(|i| i.key_pressed(egui::Key::S)))
             {
                 match self.edit.to_config(
                     config,
@@ -116,7 +131,10 @@ impl SettingsView {
                 }
             }
             if ui
-                .button(style::icon_label(ui, icons::X, "Reset"))
+                .add_enabled(
+                    has_changes,
+                    egui::Button::new(style::icon_label(ui, icons::X, "Reset")),
+                )
                 .clicked()
             {
                 self.edit = SettingsEdit::from_config(config);
@@ -128,227 +146,38 @@ impl SettingsView {
         });
 
         ui.set_min_width(ui.available_width());
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            style::field_block(ui, |ui| {
-                ui.label(egui::RichText::new("Appearance").strong().size(20.0));
-                ui.add_space(4.0);
-                style::setting_row(
-                    ui,
-                    "Theme",
-                    "Choose how the GUI theme is selected.",
-                    LABEL_WIDTH,
-                    |ui| {
-                        egui::ComboBox::from_id_salt("settings_theme")
-                            .selected_text(match self.theme_preference {
-                                ThemePreference::Auto => "Auto",
-                                ThemePreference::Light => "Light",
-                                ThemePreference::Dark => "Dark",
-                            })
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut self.theme_preference,
-                                    ThemePreference::Auto,
-                                    "Auto",
-                                );
-                                ui.selectable_value(
-                                    &mut self.theme_preference,
-                                    ThemePreference::Light,
-                                    "Light",
-                                );
-                                ui.selectable_value(
-                                    &mut self.theme_preference,
-                                    ThemePreference::Dark,
-                                    "Dark",
-                                );
-                            });
-                    },
-                );
-                style::setting_row(
-                    ui,
-                    "Start with collapsed sidebar",
-                    "Enable to launch the GUI with the sidebar collapsed.",
-                    LABEL_WIDTH,
-                    |ui| {
-                        ui.checkbox(&mut self.sidebar_collapsed, "Enabled");
-                    },
-                );
-            });
+        let mut dock_state = DockState::new(vec![
+            SettingsTab::General,
+            SettingsTab::Appearance,
+            SettingsTab::Jira,
+            SettingsTab::WorkingHours,
+        ]);
+        dock_state.set_active_tab((
+            SurfaceIndex::main(),
+            NodeIndex::root(),
+            TabIndex(self.selected_tab.to_index()),
+        ));
 
-            style::field_block(ui, |ui| {
-                ui.label(egui::RichText::new("Core").strong().size(20.0));
-                ui.add_space(4.0);
-                style::setting_text_row(
-                    ui,
-                    "Default project",
-                    "Project preselected when starting tracking.",
-                    LABEL_WIDTH,
-                    &mut self.edit.default_project,
-                );
-                style::setting_text_row(
-                    ui,
-                    "Tracking stability (seconds)",
-                    "How long an app/title match must stay stable before tracking changes.",
-                    LABEL_WIDTH,
-                    &mut self.edit.tracking_stability_seconds,
-                );
-                style::setting_text_row(
-                    ui,
-                    "Reminder interval (seconds)",
-                    "How often reminders are shown while tracking is running.",
-                    LABEL_WIDTH,
-                    &mut self.edit.track_reminder_seconds,
-                );
-                style::setting_text_row(
-                    ui,
-                    "Reminder snooze (seconds)",
-                    "How long reminders stay snoozed after manual stop.",
-                    LABEL_WIDTH,
-                    &mut self.edit.track_reminder_snooze_seconds,
-                );
-                style::setting_text_row(
-                    ui,
-                    "Summary refresh (seconds)",
-                    "How often summary data is refreshed.",
-                    LABEL_WIDTH,
-                    &mut self.edit.summary_update_seconds,
-                );
-                style::setting_text_row(
-                    ui,
-                    "Report start",
-                    "Optional report start date/time filter.",
-                    LABEL_WIDTH,
-                    &mut self.edit.report_start,
-                );
-                style::setting_text_row(
-                    ui,
-                    "Report end",
-                    "Optional report end date/time filter.",
-                    LABEL_WIDTH,
-                    &mut self.edit.report_end,
-                );
-                style::setting_text_row(
-                    ui,
-                    "Database file",
-                    "Path to the LazyTime SQLite database file.",
-                    LABEL_WIDTH,
-                    &mut self.edit.db_file,
-                );
-                style::setting_text_row(
-                    ui,
-                    "IPC socket path",
-                    "Socket endpoint used for daemon communication.",
-                    LABEL_WIDTH,
-                    &mut self.edit.ipc_socket_path,
-                );
-            });
+        let mut tab_viewer = SettingsTabViewer {
+            view: self,
+            active_tab: None,
+        };
+        let mut dock_style = Style::from_egui(ui.style().as_ref());
+        dock_style.tab_bar.bg_fill = dock_style.tab.tab_body.bg_fill;
+        dock_style.tab_bar.height = 30.0;
+        dock_style.tab.minimum_width = Some(110.0);
 
-            style::field_block(ui, |ui| {
-                ui.label(egui::RichText::new("Jira").strong().size(20.0));
-                ui.add_space(4.0);
-                style::setting_text_row(
-                    ui,
-                    "Jira URL",
-                    "Base URL of your Jira instance.",
-                    LABEL_WIDTH,
-                    &mut self.edit.jira_url,
-                );
-                style::setting_row(
-                    ui,
-                    "Jira API token",
-                    "Token used for Jira authentication.",
-                    LABEL_WIDTH,
-                    |ui| {
-                        if self.edit.jira_token_masked {
-                            let mut masked = "*".repeat(self.edit.jira_token.chars().count());
-                            style::padded_text_edit(ui, &mut masked);
-                        } else {
-                            style::padded_text_edit(ui, &mut self.edit.jira_token);
-                        }
-                        let icon = if self.edit.jira_token_masked {
-                            icons::EYE
-                        } else {
-                            icons::EYE_SLASH
-                        };
-                        if ui.button(style::icon_label(ui, icon, "")).clicked() {
-                            self.edit.jira_token_masked = !self.edit.jira_token_masked;
-                        }
-                    },
-                );
-                style::setting_text_row(
-                    ui,
-                    "Jira email",
-                    "Account email used for Jira API access.",
-                    LABEL_WIDTH,
-                    &mut self.edit.jira_email,
-                );
-                style::setting_text_row(
-                    ui,
-                    "Jira project key",
-                    "Default Jira project key for synchronization.",
-                    LABEL_WIDTH,
-                    &mut self.edit.jira_project,
-                );
-                style::setting_text_row(
-                    ui,
-                    "Jira assignee",
-                    "Optional assignee filter (for example: me).",
-                    LABEL_WIDTH,
-                    &mut self.edit.jira_assignee,
-                );
-                style::setting_text_row(
-                    ui,
-                    "Jira issue type",
-                    "Issue type created during sync (for example: Task).",
-                    LABEL_WIDTH,
-                    &mut self.edit.jira_issue_type,
-                );
-                style::setting_text_row(
-                    ui,
-                    "SAP field name",
-                    "Jira field key used to store SAP references.",
-                    LABEL_WIDTH,
-                    &mut self.edit.jira_sap_field,
-                );
-            });
-
-            style::field_block(ui, |ui| {
-                ui.label(egui::RichText::new("Working Hours").strong().size(20.0));
-                ui.add_space(4.0);
-                style::setting_readonly_row(
-                    ui,
-                    "Weekly schedule",
-                    "Overview of configured ranges per day.",
-                    LABEL_WIDTH,
-                    &format_working_hours_summary(&self.edit.working_hours),
-                );
-                style::setting_row(
-                    ui,
-                    "",
-                    "",
-                    LABEL_WIDTH,
-                    |ui| {
-                        if ui
-                            .button(style::icon_label(
-                                ui,
-                                icons::CLOCK_COUNTDOWN,
-                                "Edit Working Hours",
-                            ))
-                            .clicked()
-                        {
-                            self.working_hours_modal = true;
-                        }
-                    },
-                );
-            });
-        });
-
-        if self.working_hours_modal {
-            if message.is_none() {
-                message = self.render_working_hours_modal(ctx);
-            } else {
-                let _ = self.render_working_hours_modal(ctx);
-            }
+        DockArea::new(&mut dock_state)
+            .id(egui::Id::new("settings_dock_tabs"))
+            .style(dock_style)
+            .show_close_buttons(false)
+            .show_leaf_close_all_buttons(false)
+            .show_leaf_collapse_buttons(false)
+            .draggable_tabs(false)
+            .tab_context_menus(false)
+            .show_inside(ui, &mut tab_viewer);
+        if let Some(active_tab) = tab_viewer.active_tab {
+            self.selected_tab = active_tab;
         }
 
         message
@@ -358,6 +187,30 @@ impl SettingsView {
         let v = self.pref_changed;
         self.pref_changed = false;
         v
+    }
+
+    fn has_unsaved_changes(&self, config: &Config) -> bool {
+        let Ok(next) = self
+            .edit
+            .to_config(config, self.theme_preference.clone(), self.sidebar_collapsed)
+        else {
+            return true;
+        };
+        match (serde_json::to_value(&next), serde_json::to_value(config)) {
+            (Ok(a), Ok(b)) => a != b,
+            _ => true,
+        }
+    }
+}
+
+impl SettingsTab {
+    fn to_index(&self) -> usize {
+        match self {
+            SettingsTab::General => 0,
+            SettingsTab::Appearance => 1,
+            SettingsTab::Jira => 2,
+            SettingsTab::WorkingHours => 3,
+        }
     }
 }
 
@@ -453,22 +306,4 @@ fn resolve_config_path(config_path: Option<&str>) -> PathBuf {
         return home.join(".config/lazytime/config.json");
     }
     PathBuf::from("./config.json")
-}
-
-fn format_working_hours_summary(map: &BTreeMap<u8, Vec<TimeRange>>) -> String {
-    let mut lines = Vec::with_capacity(WEEKDAY_NAMES.len());
-    for (day_idx, day_name) in WEEKDAY_NAMES.iter().enumerate() {
-        let ranges = map.get(&(day_idx as u8)).cloned().unwrap_or_default();
-        if ranges.is_empty() {
-            lines.push(format!("{}:", day_name));
-            continue;
-        }
-
-        let mut rendered_ranges = Vec::with_capacity(ranges.len());
-        for range in ranges {
-            rendered_ranges.push(format!("({}-{})", range.start, range.end));
-        }
-        lines.push(format!("{}: {}", day_name, rendered_ranges.join(" ")));
-    }
-    lines.join("\n")
 }

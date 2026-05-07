@@ -1,151 +1,148 @@
-use std::time::Duration;
-
-use chrono::{NaiveTime, Timelike};
 use eframe::egui;
 use egui_phosphor_icons::icons;
-use egui_timepicker::TimePickerButton;
 
 use crate::config::TimeRange;
-
-use super::{SettingsView, WEEKDAY_NAMES};
 use crate::gui::style;
 
+use super::{SettingsView, WEEKDAY_NAMES};
+
 impl SettingsView {
-    pub(super) fn render_working_hours_modal(&mut self, ctx: &egui::Context) -> Option<String> {
-        let mut toast = None;
-        let mut opened_overlay_this_frame = false;
-        let max_ranges_in_day = self
+    pub(super) fn render_working_hours_inline(&mut self, ui: &mut egui::Ui) {
+        egui::Grid::new("working_hours_inline_grid")
+            .num_columns(2)
+            .spacing([12.0, 34.0])
+            .show(ui, |ui| {
+                for (day_idx, day_name) in WEEKDAY_NAMES.iter().enumerate() {
+                    let day = day_idx as u8;
+                    ui.label(*day_name);
+                    self.render_day_inline(ui, day);
+                    ui.end_row();
+                }
+            });
+    }
+
+    fn render_day_inline(&mut self, ui: &mut egui::Ui, day: u8) {
+        let mut remove_idx: Option<usize> = None;
+        let mut action_error: Option<String> = None;
+        let len = self
             .edit
             .working_hours
-            .values()
+            .get(&day)
             .map(std::vec::Vec::len)
-            .max()
-            .unwrap_or(0)
-            .min(4) as f32;
-        let dialog_width = (max_ranges_in_day * 110.0) + 210.0;
-        let esc_pressed = ctx.input(|i| i.key_pressed(egui::Key::Escape));
-        style::draw_modal_backdrop(ctx);
-        egui::Window::new("Working hours")
-            .order(egui::Order::Foreground)
-            .collapsible(false)
-            .resizable(false)
-            .default_width(dialog_width)
-            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
-            .show(ctx, |ui| {
-                egui::Frame::new()
-                    .inner_margin(egui::Margin::same(style::DIALOG_MARGIN))
-                    .show(ui, |ui| {
-                        ui.set_min_width(dialog_width - 20.0);
-                        ui.label("Click a range to edit. Changes are only saved with the global Save button.");
-                        ui.separator();
+            .unwrap_or(0);
 
-                        egui::Grid::new("working_hours_grid")
-                            .num_columns(2)
-                            .spacing([12.0, 8.0])
-                            .show(ui, |ui| {
-                                let button_height =
-                                    ui.spacing().interact_size.y + (style::BUTTON_PAD_Y as f32 * 2.0);
-                                for (day_idx, day_name) in WEEKDAY_NAMES.iter().enumerate() {
-                                    let day = day_idx as u8;
-                                    ui.allocate_ui_with_layout(
-                                        egui::vec2(40.0, button_height),
-                                        egui::Layout::left_to_right(egui::Align::Center),
-                                        |ui| {
-                                            ui.label(*day_name);
-                                        },
-                                    );
-                                    ui.horizontal(|ui| {
-                                        let ranges = self
-                                            .edit
-                                            .working_hours
-                                            .get(&day)
-                                            .cloned()
-                                            .unwrap_or_default();
+        ui.vertical(|ui| {
+            for idx in 0..len {
+                let (start_value, end_value) = {
+                    let range = &self.edit.working_hours.get(&day).expect("day exists")[idx];
+                    (range.start.clone(), range.end.clone())
+                };
 
-                                        for (range_idx, range) in ranges.iter().enumerate() {
-                                            let response = ui.add_sized(
-                                                [0.0, button_height],
-                                                egui::Button::new(format!(
-                                                    "{}-{}",
-                                                    range.start, range.end
-                                                )),
-                                            );
-                                            if response.clicked() {
-                                                egui::Popup::close_all(ctx);
-                                                self.working_hours_overlay = Some((day, range_idx));
-                                                self.working_hours_overlay_pos =
-                                                    Some(response.rect.left_bottom() + egui::vec2(0.0, 4.0));
-                                                self.working_hours_last_edit_at = None;
-                                                opened_overlay_this_frame = true;
-                                            }
-                                        }
+                let start_error = validate_hhmm_input("start", &start_value);
+                let end_error = validate_hhmm_input("end", &end_value);
+                let range_error = validate_ordered_range(&start_value, &end_value);
 
-                                        if ranges.len() < 4 {
-                                            let plus_button = ui
-                                                .add_sized(
-                                                    [button_height, button_height],
-                                                    egui::Button::new(style::icon_label(ui, icons::PLUS, "")),
-                                                )
-                                                .on_hover_text("Add range");
-                                            if plus_button.clicked() {
-                                                match self.add_working_hours_range(day) {
-                                                    Ok(_) => {
-                                                        self.working_hours_last_error = None;
-                                                    }
-                                                    Err(err) => {
-                                                        toast = Some(err);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    });
-                                    ui.end_row();
-                                }
-                            });
-
-                        ui.separator();
-
-                        ui.horizontal(|ui| {
-                            if ui
-                                .button(style::icon_label(ui, icons::X, "Close"))
-                                .clicked()
-                                || esc_pressed
-                            {
-                                egui::Popup::close_all(ctx);
-                                self.working_hours_modal = false;
-                                self.working_hours_overlay = None;
-                                self.working_hours_overlay_pos = None;
-                                self.working_hours_last_edit_at = None;
-                                self.working_hours_last_error = None;
-                            }
-                        });
-                    });
-            });
-
-        self.render_working_hours_overlay(ctx, opened_overlay_this_frame);
-
-        if let Some(last_edit) = self.working_hours_last_edit_at
-            && last_edit.elapsed() >= Duration::from_millis(300)
-        {
-            self.working_hours_last_edit_at = None;
-            if let Some((day, _)) = self.working_hours_overlay {
-                match validate_day_ranges(self, day) {
-                    Ok(()) => {
-                        self.working_hours_last_error = None;
+                ui.horizontal(|ui| {
+                    if let Some(range) = self
+                        .edit
+                        .working_hours
+                        .get_mut(&day)
+                        .and_then(|ranges| ranges.get_mut(idx))
+                    {
+                        style::padded_text_edit_sized_validated(
+                            ui,
+                            &mut range.start,
+                            96.0,
+                            start_error.as_deref(),
+                        );
                     }
-                    Err(err) => {
-                        if self.working_hours_last_error.as_deref() != Some(err.as_str()) {
-                            self.working_hours_last_error = Some(err.clone());
-                            if toast.is_none() {
-                                toast = Some(err);
-                            }
-                        }
+
+                    ui.label("-");
+                    if let Some(range) = self
+                        .edit
+                        .working_hours
+                        .get_mut(&day)
+                        .and_then(|ranges| ranges.get_mut(idx))
+                    {
+                        style::padded_text_edit_sized_validated(
+                            ui,
+                            &mut range.end,
+                            96.0,
+                            end_error.as_deref().or(range_error.as_deref()),
+                        );
                     }
+
+                    if ui
+                        .button(style::icon_label(ui, icons::TRASH, ""))
+                        .on_hover_text("Delete range")
+                        .clicked()
+                    {
+                        remove_idx = Some(idx);
+                    }
+                });
+
+                if let Some(err) = start_error
+                    .as_deref()
+                    .or(end_error.as_deref())
+                    .or(range_error.as_deref())
+                {
+                    let palette = style::validation_palette(ui);
+                    ui.label(egui::RichText::new(err).size(13.0).color(palette.description));
                 }
             }
-        }
 
-        toast
+            ui.horizontal(|ui| {
+                if len < 4
+                    && ui
+                        .button(style::icon_label(ui, icons::PLUS, "Add range"))
+                        .clicked()
+                    && let Err(err) = self.add_working_hours_range(day)
+                {
+                    action_error = Some(err);
+                }
+
+                if day != 0 && len == 0 {
+                    let monday_has_ranges = self
+                        .edit
+                        .working_hours
+                        .get(&0)
+                        .map(|ranges| !ranges.is_empty())
+                        .unwrap_or(false);
+                    if ui
+                        .add_enabled(
+                            monday_has_ranges,
+                            egui::Button::new(style::icon_label(
+                                ui,
+                                icons::ARROW_LINE_DOWN,
+                                "overtake from monday",
+                            ))
+                                .min_size(egui::vec2(0.0, ui.spacing().interact_size.y)),
+                        )
+                        .clicked()
+                        && let Err(err) = self.overtake_ranges_from_monday(day)
+                    {
+                        action_error = Some(err);
+                    }
+                }
+            });
+
+            if let Some(idx) = remove_idx
+                && let Some(ranges) = self.edit.working_hours.get_mut(&day)
+                && idx < ranges.len()
+            {
+                ranges.remove(idx);
+            }
+
+            if let Some(err) = action_error {
+                let palette = style::validation_palette(ui);
+                ui.label(egui::RichText::new(err).size(13.0).color(palette.description));
+            }
+
+            if let Err(err) = validate_day_ranges(self, day) {
+                let palette = style::validation_palette(ui);
+                ui.label(egui::RichText::new(err).size(13.0).color(palette.description));
+            }
+        });
     }
 
     fn add_working_hours_range(&mut self, day: u8) -> Result<usize, String> {
@@ -174,163 +171,32 @@ impl SettingsView {
         Ok(ranges.len() - 1)
     }
 
-    fn render_working_hours_overlay(&mut self, ctx: &egui::Context, opened_this_frame: bool) {
-        let Some((day, range_idx)) = self.working_hours_overlay else {
-            return;
-        };
-
-        let Some(ranges) = self.edit.working_hours.get_mut(&day) else {
-            self.working_hours_overlay = None;
-            self.working_hours_overlay_pos = None;
-            self.working_hours_last_edit_at = None;
-            return;
-        };
-        if range_idx >= ranges.len() {
-            self.working_hours_overlay = None;
-            self.working_hours_overlay_pos = None;
-            self.working_hours_last_edit_at = None;
-            return;
+    fn overtake_ranges_from_monday(&mut self, day: u8) -> Result<(), String> {
+        if day == 0 {
+            return Err("monday cannot overtake from monday".to_string());
         }
 
-        let mut should_delete = false;
-        let mut should_close = false;
-        let mut changed = false;
-        let mut start_picker_hit_rect: Option<egui::Rect> = None;
-        let mut end_picker_hit_rect: Option<egui::Rect> = None;
-        let pos = self
-            .working_hours_overlay_pos
-            .unwrap_or_else(|| egui::pos2(320.0, 220.0));
-
-        let overlay_area = egui::Area::new(egui::Id::new("working_hours_range_overlay"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(pos)
-            .show(ctx, |ui| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.set_min_width(180.0);
-                    ui.set_max_width(180.0);
-                    ui.vertical(|ui| {
-                        ui.horizontal(|ui| {
-                            ui.label("Start");
-                            let mut start_time = parse_hhmm_time(&ranges[range_idx].start)
-                                .unwrap_or_else(|| {
-                                    NaiveTime::from_hms_opt(9, 0, 0).expect("valid default")
-                                });
-                            let start_id = format!("working_hours_start_time_{}_{}", day, range_idx);
-                            let response = ui.add(
-                                TimePickerButton::new(&mut start_time)
-                                    .id_salt(start_id.as_str())
-                                    .show_icon(false)
-                                    .show_seconds(false),
-                            );
-                            start_picker_hit_rect = Some(timepicker_popup_hit_rect(ui, response.rect));
-                            if response.changed() {
-                                ranges[range_idx].start = time_to_hhmm(start_time);
-                                changed = true;
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("End");
-                            let mut end_time = parse_hhmm_time(&ranges[range_idx].end)
-                                .unwrap_or_else(|| {
-                                    NaiveTime::from_hms_opt(10, 0, 0).expect("valid default")
-                                });
-                            let end_id = format!("working_hours_end_time_{}_{}", day, range_idx);
-                            let response = ui.add(
-                                TimePickerButton::new(&mut end_time)
-                                    .id_salt(end_id.as_str())
-                                    .show_icon(false)
-                                    .show_seconds(false),
-                            );
-                            end_picker_hit_rect = Some(timepicker_popup_hit_rect(ui, response.rect));
-                            if response.changed() {
-                                ranges[range_idx].end = time_to_hhmm(end_time);
-                                changed = true;
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            if ui
-                                .button(style::icon_label(ui, icons::TRASH, "Delete"))
-                                .clicked()
-                            {
-                                should_delete = true;
-                            }
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    if ui.button("OK").clicked() {
-                                        should_close = true;
-                                    }
-                                },
-                            );
-                        });
-                    });
-                });
-            });
-
-        if !opened_this_frame {
-            let (pressed, click_pos) =
-                ctx.input(|i| (i.pointer.any_pressed(), i.pointer.interact_pos()));
-            if pressed
-                && let Some(click_pos) = click_pos
-                && !overlay_area.response.rect.contains(click_pos)
-                && !start_picker_hit_rect.is_some_and(|rect| rect.contains(click_pos))
-                && !end_picker_hit_rect.is_some_and(|rect| rect.contains(click_pos))
-            {
-                egui::Popup::close_all(ctx);
-                self.working_hours_overlay = None;
-                self.working_hours_overlay_pos = None;
-                self.working_hours_last_edit_at = None;
-                self.working_hours_last_error = None;
-                return;
-            }
+        let monday_ranges = self
+            .edit
+            .working_hours
+            .get(&0)
+            .cloned()
+            .unwrap_or_default();
+        if monday_ranges.is_empty() {
+            return Err("monday has no ranges to overtake".to_string());
         }
 
-        if changed {
-            self.working_hours_last_edit_at = Some(std::time::Instant::now());
-            self.working_hours_last_error = None;
+        if let Some(existing) = self.edit.working_hours.get(&day)
+            && !existing.is_empty()
+        {
+            return Err("target day already has ranges".to_string());
         }
 
-        if should_delete {
-            if let Some(ranges) = self.edit.working_hours.get_mut(&day)
-                && range_idx < ranges.len()
-            {
-                ranges.remove(range_idx);
-            }
-            egui::Popup::close_all(ctx);
-            self.working_hours_overlay = None;
-            self.working_hours_overlay_pos = None;
-            self.working_hours_last_edit_at = None;
-            self.working_hours_last_error = None;
-            return;
-        }
-
-        if should_close {
-            egui::Popup::close_all(ctx);
-            self.working_hours_overlay = None;
-            self.working_hours_overlay_pos = None;
-            self.working_hours_last_edit_at = None;
-        }
+        self.edit
+            .working_hours
+            .insert(day, monday_ranges.into_iter().take(4).collect());
+        Ok(())
     }
-}
-
-fn timepicker_popup_hit_rect(ui: &egui::Ui, button_rect: egui::Rect) -> egui::Rect {
-    let popup_width = 250.0;
-    let popup_height = 340.0;
-    let width_with_padding = popup_width
-        + ui.style().spacing.item_spacing.x
-        + ui.style().spacing.window_margin.leftf()
-        + ui.style().spacing.window_margin.rightf();
-
-    let mut x = button_rect.left();
-    if x + width_with_padding > ui.clip_rect().right() {
-        x = button_rect.right() - width_with_padding;
-    }
-    x = x.max(ui.style().spacing.window_margin.leftf());
-
-    egui::Rect::from_min_size(
-        egui::pos2(x, button_rect.left_bottom().y),
-        egui::vec2(width_with_padding, popup_height),
-    )
 }
 
 fn hhmm_to_minutes(raw: &str) -> Result<i32, String> {
@@ -338,13 +204,23 @@ fn hhmm_to_minutes(raw: &str) -> Result<i32, String> {
     Ok((h as i32 * 60) + m as i32)
 }
 
-fn parse_hhmm_time(raw: &str) -> Option<NaiveTime> {
-    let (hour, minute) = crate::config::parse_hhmm(raw).ok()?;
-    NaiveTime::from_hms_opt(hour, minute, 0)
+fn validate_hhmm_input(label: &str, raw: &str) -> Option<String> {
+    if raw.trim().is_empty() {
+        return Some(format!("{} time is required", label));
+    }
+    crate::config::parse_hhmm(raw)
+        .err()
+        .map(|_| format!("invalid {}; expected HH:mm", label))
 }
 
-fn time_to_hhmm(time: NaiveTime) -> String {
-    format!("{:02}:{:02}", time.hour(), time.minute())
+fn validate_ordered_range(start: &str, end: &str) -> Option<String> {
+    let start_m = hhmm_to_minutes(start).ok()?;
+    let end_m = hhmm_to_minutes(end).ok()?;
+    if end_m <= start_m {
+        Some("end must be greater than start".to_string())
+    } else {
+        None
+    }
 }
 
 fn minutes_to_hhmm(total_minutes: i32) -> String {

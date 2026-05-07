@@ -216,8 +216,12 @@ impl CurrentView {
                             }
                             ui.separator();
                             ui.horizontal(|ui| {
+                                let can_confirm = !self.projects.is_empty();
                                 if ui
-                                    .button(style::icon_label(ui, icons::CHECK, "OK"))
+                                    .add_enabled(
+                                        can_confirm,
+                                        egui::Button::new(style::icon_label(ui, icons::CHECK, "OK")),
+                                    )
                                     .clicked()
                                 {
                                     if let Some(project) = self.projects.get(self.selected_project) {
