@@ -63,6 +63,14 @@ pub fn detected_backend_name() -> &'static str {
     "macos"
 }
 
+#[cfg(all(feature = "backend-macos", target_os = "macos"))]
+pub fn request_macos_permissions_if_needed() {
+    macos::request_permissions_if_needed();
+}
+
+#[cfg(not(all(feature = "backend-macos", target_os = "macos")))]
+pub fn request_macos_permissions_if_needed() {}
+
 #[cfg(not(any(
     all(feature = "backend-sway", target_os = "linux"),
     all(

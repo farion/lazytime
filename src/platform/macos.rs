@@ -2,6 +2,11 @@ use std::sync::mpsc;
 
 use super::types::{LockEvent, OutputRect, WindowInfo};
 
+pub fn request_permissions_if_needed() {
+    super::ax::request_accessibility_permission_prompt();
+    super::ax::request_automation_permission_prompt();
+}
+
 pub fn spawn_macos_monitors(tx_lock: mpsc::Sender<LockEvent>, tx_window: mpsc::Sender<WindowInfo>) {
     super::macos_lock::spawn_lock_monitor(tx_lock);
 

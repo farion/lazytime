@@ -734,7 +734,11 @@ pub fn list_trackings_for_date(conn: &Connection, date: &str) -> Result<Vec<Trac
     Ok(out)
 }
 
-pub fn list_trackings_for_range(conn: &Connection, start_date: &str, end_date: &str) -> Result<Vec<Tracking>> {
+pub fn list_trackings_for_range(
+    conn: &Connection,
+    start_date: &str,
+    end_date: &str,
+) -> Result<Vec<Tracking>> {
     let mut stmt = conn.prepare(
         "SELECT id, project_name, start_ts, end_ts, created_by, jira_synced, notes
          FROM trackings

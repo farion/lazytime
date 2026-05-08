@@ -52,9 +52,7 @@ pub fn persist_jira_token(token: &str, config_token: &mut Option<String>) {
             *config_token = None;
         }
         Err(err) => {
-            tracing::warn!(
-                "failed to store jira token in keyring; using config fallback: {err}"
-            );
+            tracing::warn!("failed to store jira token in keyring; using config fallback: {err}");
             *config_token = Some(trimmed.to_string());
         }
     }

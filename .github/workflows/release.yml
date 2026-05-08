@@ -137,6 +137,28 @@ jobs:
       - name: Build release (windows)
         run: cargo build --release --no-default-features --features "backend-windows ipc-tcp popup-ui"
 
+      - name: Sign executable (self-signed)
+        shell: powershell
+        run: |
+          $cert = New-SelfSignedCertificate `
+            -Type CodeSigningCert `
+            -Subject "CN=LazyTime Self Signed" `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -KeyAlgorithm RSA `
+            -KeyLength 2048 `
+            -HashAlgorithm SHA256
+
+          $signature = Set-AuthenticodeSignature `
+            -FilePath target\release\lazytime.exe `
+            -Certificate $cert `
+            -HashAlgorithm SHA256
+
+          if ($signature.Status -notin @('Valid', 'NotTrusted')) {
+            throw "code signing failed with status: $($signature.Status)"
+          }
+
+          Get-AuthenticodeSignature target\release\lazytime.exe | Format-List Status, StatusMessage, SignerCertificate
+
       - name: Package (zip)
         shell: powershell
         run: |
@@ -192,9 +214,47 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
-          mkdir -p dist/dmg
-          cp target/release/lazytime dist/dmg/lazytime
-          hdiutil create -volname "lazytime" -srcfolder dist/dmg -ov -format UDZO "lazytime-${{ github.ref_name }}-macos-aarch64.dmg"
+
+          mkdir -p .build/certs
+          cat > .build/certs/openssl-codesign.cnf <<'EOF'
+          [ req ]
+          default_bits       = 2048
+          distinguished_name = req_distinguished_name
+          x509_extensions    = v3_req
+          prompt             = no
+
+          [ req_distinguished_name ]
+          CN = LazyTime Self Signed
+
+          [ v3_req ]
+          keyUsage = critical, digitalSignature
+          extendedKeyUsage = codeSigning
+          basicConstraints = critical, CA:false
+          subjectKeyIdentifier = hash
+          authorityKeyIdentifier = keyid,issuer
+          EOF
+
+          openssl req -new -newkey rsa:2048 -nodes \
+            -keyout .build/certs/lazytime-sign.key \
+            -x509 -days 3650 \
+            -out .build/certs/lazytime-sign.crt \
+            -config .build/certs/openssl-codesign.cnf
+
+          openssl pkcs12 -export \
+            -inkey .build/certs/lazytime-sign.key \
+            -in .build/certs/lazytime-sign.crt \
+            -out .build/certs/lazytime-sign.p12 \
+            -passout pass:
+
+          security create-keychain -p "" lazytime-build.keychain
+          security unlock-keychain -p "" lazytime-build.keychain
+          security import .build/certs/lazytime-sign.p12 -k lazytime-build.keychain -P "" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" lazytime-build.keychain
+          security list-keychains -s lazytime-build.keychain login.keychain
+
+          chmod +x tools/package-macos.sh
+          tools/package-macos.sh target/release/lazytime "$VERSION" dist "LazyTime Self Signed"
+          mv "dist/LazyTime-${VERSION}.dmg" "lazytime-${{ github.ref_name }}-macos-aarch64.dmg"
 
       - name: Upload macOS asset to GitHub release
         env:

@@ -30,6 +30,24 @@ pub fn monitor_window_events(tx_window: mpsc::Sender<WindowInfo>) -> Result<()> 
     }
 }
 
+pub fn request_accessibility_permission_prompt() {
+    let script = r#"
+tell application "System Events"
+  return UI elements enabled
+end tell
+"#;
+    let _ = Command::new("osascript").arg("-e").arg(script).output();
+}
+
+pub fn request_automation_permission_prompt() {
+    let script = r#"
+tell application "System Events"
+  return name of first process
+end tell
+"#;
+    let _ = Command::new("osascript").arg("-e").arg(script).output();
+}
+
 fn accessibility_permission_granted() -> bool {
     let script = r#"
 tell application "System Events"

@@ -85,7 +85,12 @@ impl Default for VisualDayView {
 }
 
 impl VisualDayView {
-    pub fn ui(&mut self, ctx: &egui::Context, ui: &mut egui::Ui, config: &Config) -> Option<String> {
+    pub fn ui(
+        &mut self,
+        ctx: &egui::Context,
+        ui: &mut egui::Ui,
+        config: &Config,
+    ) -> Option<String> {
         let conn = db::open(config.db_path()).ok()?;
         let mut message = None;
         let mut selected_day = self.selected_day;
@@ -93,7 +98,11 @@ impl VisualDayView {
 
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Visual Day").size(18.0).strong());
-            if ui.button(style::icon_label(ui, icons::ARROW_LEFT, "")).on_hover_text("Previous day").clicked() {
+            if ui
+                .button(style::icon_label(ui, icons::ARROW_LEFT, ""))
+                .on_hover_text("Previous day")
+                .clicked()
+            {
                 selected_day = selected_day.pred_opt().unwrap_or(selected_day);
             }
             if ui
@@ -103,16 +112,27 @@ impl VisualDayView {
             {
                 self.day_modal = true;
             }
-            if ui.button(style::icon_label(ui, icons::ARROW_RIGHT, "")).on_hover_text("Next day").clicked() {
+            if ui
+                .button(style::icon_label(ui, icons::ARROW_RIGHT, ""))
+                .on_hover_text("Next day")
+                .clicked()
+            {
                 selected_day = selected_day.succ_opt().unwrap_or(selected_day);
             }
-            if ui.button(style::icon_label(ui, icons::CALENDAR_DOT, "")).on_hover_text("Today").clicked() {
+            if ui
+                .button(style::icon_label(ui, icons::CALENDAR_DOT, ""))
+                .on_hover_text("Today")
+                .clicked()
+            {
                 selected_day = Local::now().date_naive();
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let is_today = selected_day == Local::now().date_naive();
                 if ui
-                    .add_enabled(is_today, egui::Button::new(style::icon_label(ui, icons::BROOM, "")))
+                    .add_enabled(
+                        is_today,
+                        egui::Button::new(style::icon_label(ui, icons::BROOM, "")),
+                    )
                     .on_hover_text("Merge adjacent unsynced trackings for shown day")
                     .clicked()
                     && let Ok(stats) = cleanup_unsynced_trackings_in_range(
@@ -124,7 +144,10 @@ impl VisualDayView {
                     message = Some(if stats.removed_rows == 0 {
                         "cleanup: nothing to merge".to_string()
                     } else {
-                        format!("cleanup: merged {} groups, removed {} rows", stats.merged_groups, stats.removed_rows)
+                        format!(
+                            "cleanup: merged {} groups, removed {} rows",
+                            stats.merged_groups, stats.removed_rows
+                        )
                     });
                 }
             });
@@ -167,7 +190,13 @@ impl VisualDayView {
             lane_projects.push("(no projects)".to_string());
             project_lanes.insert("(no projects)".to_string(), 0);
         }
-        let zoom_delta = ctx.input(|i| if i.modifiers.ctrl { i.zoom_delta() } else { 1.0 });
+        let zoom_delta = ctx.input(|i| {
+            if i.modifiers.ctrl {
+                i.zoom_delta()
+            } else {
+                1.0
+            }
+        });
         if zoom_delta.is_finite() && (zoom_delta - 1.0).abs() > f32::EPSILON {
             let prev_zoom = self.zoom_x;
             let next_zoom = (self.zoom_x * zoom_delta).clamp(1.0, 6.0);
@@ -214,8 +243,10 @@ impl VisualDayView {
             let row_height = chart_height.max(260.0);
 
             ui.horizontal(|ui| {
-                let (label_rect, _) =
-                    ui.allocate_exact_size(egui::vec2(left_label_width, row_height), egui::Sense::hover());
+                let (label_rect, _) = ui.allocate_exact_size(
+                    egui::vec2(left_label_width, row_height),
+                    egui::Sense::hover(),
+                );
                 let label_painter = ui.painter_at(label_rect);
                 let visuals = ui.visuals();
                 label_painter.rect_filled(label_rect, 6.0, visuals.faint_bg_color);
@@ -343,7 +374,8 @@ impl VisualDayView {
                                 let lane_span = LANE_H + LANE_GAP;
                                 if lane_span > 0.0 && !lane_projects.is_empty() {
                                     let raw_lane = ((pointer_y - chart_rect.top()) / lane_span)
-                                        .floor() as isize;
+                                        .floor()
+                                        as isize;
                                     let clamped_lane = raw_lane
                                         .clamp(0, lane_projects.len().saturating_sub(1) as isize)
                                         as usize;
@@ -389,14 +421,17 @@ impl VisualDayView {
                                 let pointer_sec = (((pointer_pos.x - chart_rect.left())
                                     / chart_rect.width().max(1.0))
                                     * DAY_SECONDS as f32)
-                                    .floor() as i64;
-                                let hour_start = (pointer_sec.clamp(0, DAY_SECONDS - 1) / 3600) * 3600;
+                                    .floor()
+                                    as i64;
+                                let hour_start =
+                                    (pointer_sec.clamp(0, DAY_SECONDS - 1) / 3600) * 3600;
                                 let hour_end = (hour_start + 3600).min(DAY_SECONDS);
 
                                 let mut overlap_same_project = false;
                                 let mut overlap_other_project = false;
                                 for t in &trackings {
-                                    let Some(start_utc) = crate::time::parse_ts(&t.start_ts).ok() else {
+                                    let Some(start_utc) = crate::time::parse_ts(&t.start_ts).ok()
+                                    else {
                                         continue;
                                     };
                                     let end_utc = t
@@ -428,7 +463,10 @@ impl VisualDayView {
                                 if !overlap_same_project {
                                     let hour_rect = egui::Rect::from_min_max(
                                         egui::pos2(sec_to_x(chart_rect, hour_start), lane_top),
-                                        egui::pos2(sec_to_x(chart_rect, hour_end), lane_top + LANE_H),
+                                        egui::pos2(
+                                            sec_to_x(chart_rect, hour_end),
+                                            lane_top + LANE_H,
+                                        ),
                                     );
                                     let plus_size = 16.0;
                                     let plus_rect = egui::Rect::from_min_size(
@@ -445,7 +483,8 @@ impl VisualDayView {
                                         .add_enabled_ui(!overlap_other_project, |ui| {
                                             ui.put(
                                                 plus_rect,
-                                                egui::Button::new(plus_label).min_size(egui::vec2(plus_size, plus_size)),
+                                                egui::Button::new(plus_label)
+                                                    .min_size(egui::vec2(plus_size, plus_size)),
                                             )
                                         })
                                         .inner;
@@ -458,16 +497,18 @@ impl VisualDayView {
                                         && let Some((start_s, end_s)) =
                                             sec_range_to_ts(self.selected_day, hour_start, hour_end)
                                     {
-                                        message = Some(match db::add_manual_tracking(
-                                            &conn,
-                                            project_name,
-                                            &start_s,
-                                            Some(&end_s),
-                                            None,
-                                        ) {
-                                            Ok(_) => "tracking added".to_string(),
-                                            Err(err) => format!("error: {err}"),
-                                        });
+                                        message = Some(
+                                            match db::add_manual_tracking(
+                                                &conn,
+                                                project_name,
+                                                &start_s,
+                                                Some(&end_s),
+                                                None,
+                                            ) {
+                                                Ok(_) => "tracking added".to_string(),
+                                                Err(err) => format!("error: {err}"),
+                                            },
+                                        );
                                     }
                                 }
                             }
@@ -477,7 +518,9 @@ impl VisualDayView {
                             let Some(start_utc) = crate::time::parse_ts(&t.start_ts).ok() else {
                                 continue;
                             };
-                            let Some(day_start) = day_start else { continue; };
+                            let Some(day_start) = day_start else {
+                                continue;
+                            };
                             let end_utc = t
                                 .end_ts
                                 .as_deref()
@@ -492,7 +535,9 @@ impl VisualDayView {
                                 .num_seconds()
                                 .clamp(0, DAY_SECONDS);
 
-                            if let Some(drag) = self.drag.as_ref() && drag.tracking_id == t.id {
+                            if let Some(drag) = self.drag.as_ref()
+                                && drag.tracking_id == t.id
+                            {
                                 start_sec = drag.candidate_start_sec;
                                 end_sec = drag.candidate_end_sec;
                             }
@@ -522,7 +567,9 @@ impl VisualDayView {
                             let color_hex = project_colors
                                 .get(lane_project)
                                 .cloned()
-                                .unwrap_or_else(|| crate::gui::color::generate_color_for_name(lane_project));
+                                .unwrap_or_else(|| {
+                                    crate::gui::color::generate_color_for_name(lane_project)
+                                });
                             let color = crate::gui::color::color32_from_hex(&color_hex)
                                 .unwrap_or(egui::Color32::LIGHT_BLUE);
                             let invalid = self
@@ -565,18 +612,20 @@ impl VisualDayView {
                             if body_resp.dragged() {
                                 ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
                             }
-                            let left_resp = ui.interact(
-                                left_handle,
-                                ui.id().with(("visual_day_left", t.id)),
-                                egui::Sense::click_and_drag(),
-                            )
-                            .on_hover_and_drag_cursor(egui::CursorIcon::ResizeHorizontal);
-                            let right_resp = ui.interact(
-                                right_handle,
-                                ui.id().with(("visual_day_right", t.id)),
-                                egui::Sense::click_and_drag(),
-                            )
-                            .on_hover_and_drag_cursor(egui::CursorIcon::ResizeHorizontal);
+                            let left_resp = ui
+                                .interact(
+                                    left_handle,
+                                    ui.id().with(("visual_day_left", t.id)),
+                                    egui::Sense::click_and_drag(),
+                                )
+                                .on_hover_and_drag_cursor(egui::CursorIcon::ResizeHorizontal);
+                            let right_resp = ui
+                                .interact(
+                                    right_handle,
+                                    ui.id().with(("visual_day_right", t.id)),
+                                    egui::Sense::click_and_drag(),
+                                )
+                                .on_hover_and_drag_cursor(egui::CursorIcon::ResizeHorizontal);
 
                             let drag_ready = t.jira_synced == 0
                                 && (body_resp.hovered()
@@ -600,6 +649,30 @@ impl VisualDayView {
                                 egui::Stroke::new(1.0, fill.gamma_multiply(0.65)),
                                 egui::StrokeKind::Outside,
                             );
+                            if let Some(description) =
+                                t.notes.as_deref().map(str::trim).filter(|s| !s.is_empty())
+                            {
+                                let text_rect = body_rect.shrink2(egui::vec2(4.0, 1.0));
+                                if text_rect.width() > 28.0 {
+                                    let brightness = ((u32::from(fill.r()) * 299
+                                        + u32::from(fill.g()) * 587
+                                        + u32::from(fill.b()) * 114)
+                                        / 1000)
+                                        as u8;
+                                    let text_color = if brightness < 128 {
+                                        egui::Color32::from_white_alpha(235)
+                                    } else {
+                                        egui::Color32::from_black_alpha(220)
+                                    };
+                                    painter.with_clip_rect(text_rect).text(
+                                        egui::pos2(text_rect.left(), text_rect.center().y),
+                                        egui::Align2::LEFT_CENTER,
+                                        description,
+                                        egui::FontId::proportional(12.0),
+                                        text_color,
+                                    );
+                                }
+                            }
                             if self.drag.is_none() {
                                 let hover_snap_line_sec = if left_resp.hovered() {
                                     Some(start_sec)
@@ -687,8 +760,13 @@ impl VisualDayView {
                                 && let Some(pos) = ctx.input(|i| i.pointer.press_origin())
                             {
                                 if body_resp.drag_started() {
-                                    self.drag =
-                                        Some(make_drag_state(t, DragMode::Move, start_sec, end_sec, pos.x));
+                                    self.drag = Some(make_drag_state(
+                                        t,
+                                        DragMode::Move,
+                                        start_sec,
+                                        end_sec,
+                                        pos.x,
+                                    ));
                                 } else if left_resp.drag_started() {
                                     self.drag = Some(make_drag_state(
                                         t,
@@ -713,7 +791,10 @@ impl VisualDayView {
                             for snap_sec in drag.snap_lines_sec.iter().flatten() {
                                 let x = sec_to_x(chart_rect, *snap_sec);
                                 painter.line_segment(
-                                    [egui::pos2(x, chart_rect.top()), egui::pos2(x, chart_rect.bottom())],
+                                    [
+                                        egui::pos2(x, chart_rect.top()),
+                                        egui::pos2(x, chart_rect.bottom()),
+                                    ],
                                     egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 196, 64)),
                                 );
                             }
@@ -741,7 +822,11 @@ impl VisualDayView {
             if let Some(drag) = self.drag.take() {
                 if drag.is_invalid {
                     message = Some("invalid move: overlap detected".to_string());
-                } else if let Some((start_s, end_s)) = sec_range_to_ts(self.selected_day, drag.candidate_start_sec, drag.candidate_end_sec) {
+                } else if let Some((start_s, end_s)) = sec_range_to_ts(
+                    self.selected_day,
+                    drag.candidate_start_sec,
+                    drag.candidate_end_sec,
+                ) {
                     let res = db::update_tracking_times(
                         &conn,
                         drag.tracking_id,
@@ -785,7 +870,10 @@ impl VisualDayView {
 
                             ui.separator();
                             ui.horizontal(|ui| {
-                                if ui.button(style::icon_label(ui, icons::CHECK, "OK")).clicked() {
+                                if ui
+                                    .button(style::icon_label(ui, icons::CHECK, "OK"))
+                                    .clicked()
+                                {
                                     self.selected_day = day;
                                     self.day_modal = false;
                                 }
@@ -796,7 +884,11 @@ impl VisualDayView {
                                     self.selected_day = today;
                                     self.day_modal = false;
                                 }
-                                if ui.button(style::icon_label(ui, icons::X, "Cancel")).clicked() || esc_pressed {
+                                if ui
+                                    .button(style::icon_label(ui, icons::X, "Cancel"))
+                                    .clicked()
+                                    || esc_pressed
+                                {
                                     self.day_modal = false;
                                 }
                             });
@@ -815,48 +907,90 @@ impl VisualDayView {
                 .min_width(480.0)
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
                 .show(ctx, |ui| {
-                    egui::Frame::new().inner_margin(egui::Margin::same(style::DIALOG_MARGIN)).show(ui, |ui| {
-                        style::setting_row(ui, "Project", "", 110.0, |ui| {
-                            egui::ComboBox::from_id_salt("visual_day_project")
-                                .width(ui.available_width())
-                                .selected_text(form.projects.get(form.selected_project).cloned().unwrap_or_default())
-                                .show_ui(ui, |ui| {
-                                    for (idx, p) in form.projects.iter().enumerate() {
-                                        ui.selectable_value(&mut form.selected_project, idx, p);
-                                    }
-                                });
-                            if let Some(name) = form.projects.get(form.selected_project) {
-                                form.project_name = name.clone();
-                            }
-                        });
-                        style::setting_text_row(ui, "Start", "YYYY-mm-dd HH:MM", 110.0, &mut format!("{} {}", form.start_date.format("%Y-%m-%d"), form.start_time));
-                        style::setting_row(ui, "Start date/time", "", 110.0, |ui| {
-                            ui.add_sized([124.0, style::text_field_height(ui)], DatePickerButton::new(&mut form.start_date).id_salt("visual_day_start_date"));
-                            style::padded_text_edit_sized_validated(ui, &mut form.start_time, 96.0, None);
-                        });
-                        style::setting_row(ui, "End date/time", "", 110.0, |ui| {
-                            ui.add_sized([124.0, style::text_field_height(ui)], DatePickerButton::new(&mut form.end_date).id_salt("visual_day_end_date"));
-                            style::padded_text_edit_sized_validated(ui, &mut form.end_time, 96.0, None);
-                        });
-                        style::setting_row(ui, "Description", "", 110.0, |ui| {
-                            style::padded_text_edit_fill(ui, &mut form.description);
-                        });
-                        ui.separator();
-                        ui.horizontal(|ui| {
-                            if ui.button(style::icon_label(ui, icons::CHECK, "OK")).clicked() {
-                                match save_form(&conn, self.selected_day, &form) {
-                                    Ok(msg) => {
-                                        message = Some(msg);
-                                        keep_open = false;
-                                    }
-                                    Err(err) => message = Some(err),
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::same(style::DIALOG_MARGIN))
+                        .show(ui, |ui| {
+                            style::setting_row(ui, "Project", "", 110.0, |ui| {
+                                egui::ComboBox::from_id_salt("visual_day_project")
+                                    .width(ui.available_width())
+                                    .selected_text(
+                                        form.projects
+                                            .get(form.selected_project)
+                                            .cloned()
+                                            .unwrap_or_default(),
+                                    )
+                                    .show_ui(ui, |ui| {
+                                        for (idx, p) in form.projects.iter().enumerate() {
+                                            ui.selectable_value(&mut form.selected_project, idx, p);
+                                        }
+                                    });
+                                if let Some(name) = form.projects.get(form.selected_project) {
+                                    form.project_name = name.clone();
                                 }
-                            }
-                            if ui.button(style::icon_label(ui, icons::X, "Cancel")).clicked() || esc {
-                                keep_open = false;
-                            }
+                            });
+                            style::setting_text_row(
+                                ui,
+                                "Start",
+                                "YYYY-mm-dd HH:MM",
+                                110.0,
+                                &mut format!(
+                                    "{} {}",
+                                    form.start_date.format("%Y-%m-%d"),
+                                    form.start_time
+                                ),
+                            );
+                            style::setting_row(ui, "Start date/time", "", 110.0, |ui| {
+                                ui.add_sized(
+                                    [124.0, style::text_field_height(ui)],
+                                    DatePickerButton::new(&mut form.start_date)
+                                        .id_salt("visual_day_start_date"),
+                                );
+                                style::padded_text_edit_sized_validated(
+                                    ui,
+                                    &mut form.start_time,
+                                    96.0,
+                                    None,
+                                );
+                            });
+                            style::setting_row(ui, "End date/time", "", 110.0, |ui| {
+                                ui.add_sized(
+                                    [124.0, style::text_field_height(ui)],
+                                    DatePickerButton::new(&mut form.end_date)
+                                        .id_salt("visual_day_end_date"),
+                                );
+                                style::padded_text_edit_sized_validated(
+                                    ui,
+                                    &mut form.end_time,
+                                    96.0,
+                                    None,
+                                );
+                            });
+                            style::setting_row(ui, "Description", "", 110.0, |ui| {
+                                style::padded_text_edit_fill(ui, &mut form.description);
+                            });
+                            ui.separator();
+                            ui.horizontal(|ui| {
+                                if ui
+                                    .button(style::icon_label(ui, icons::CHECK, "OK"))
+                                    .clicked()
+                                {
+                                    match save_form(&conn, self.selected_day, &form) {
+                                        Ok(msg) => {
+                                            message = Some(msg);
+                                            keep_open = false;
+                                        }
+                                        Err(err) => message = Some(err),
+                                    }
+                                }
+                                if ui
+                                    .button(style::icon_label(ui, icons::X, "Cancel"))
+                                    .clicked()
+                                    || esc
+                                {
+                                    keep_open = false;
+                                }
+                            });
                         });
-                    });
                 });
             self.edit_modal = if keep_open { Some(form) } else { None };
         }
@@ -870,20 +1004,29 @@ impl VisualDayView {
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
                 .show(ctx, |ui| {
-                    egui::Frame::new().inner_margin(egui::Margin::same(style::DIALOG_MARGIN)).show(ui, |ui| {
-                        ui.label("Delete selected tracking?");
-                        ui.horizontal(|ui| {
-                            if ui.button(style::icon_label(ui, icons::CHECK, "OK")).clicked() {
-                                if db::delete_tracking(&conn, id).is_ok() {
-                                    message = Some("tracking deleted".to_string());
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::same(style::DIALOG_MARGIN))
+                        .show(ui, |ui| {
+                            ui.label("Delete selected tracking?");
+                            ui.horizontal(|ui| {
+                                if ui
+                                    .button(style::icon_label(ui, icons::CHECK, "OK"))
+                                    .clicked()
+                                {
+                                    if db::delete_tracking(&conn, id).is_ok() {
+                                        message = Some("tracking deleted".to_string());
+                                    }
+                                    self.confirm_delete_id = None;
                                 }
-                                self.confirm_delete_id = None;
-                            }
-                            if ui.button(style::icon_label(ui, icons::X, "Cancel")).clicked() || esc {
-                                self.confirm_delete_id = None;
-                            }
+                                if ui
+                                    .button(style::icon_label(ui, icons::X, "Cancel"))
+                                    .clicked()
+                                    || esc
+                                {
+                                    self.confirm_delete_id = None;
+                                }
+                            });
                         });
-                    });
                 });
         }
 
@@ -899,29 +1042,60 @@ fn draw_hour_grid(painter: &egui::Painter, rect: egui::Rect, visuals: &egui::Vis
         } else {
             egui::Stroke::new(1.0, visuals.faint_bg_color)
         };
-        painter.line_segment([egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())], stroke);
+        painter.line_segment(
+            [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+            stroke,
+        );
         if hour <= 23 {
-            painter.text(egui::pos2(x + 2.0, rect.top() - 18.0), egui::Align2::LEFT_TOP, format!("{:02}:00", hour), egui::FontId::proportional(11.0), visuals.weak_text_color());
+            painter.text(
+                egui::pos2(x + 2.0, rect.top() - 18.0),
+                egui::Align2::LEFT_TOP,
+                format!("{:02}:00", hour),
+                egui::FontId::proportional(11.0),
+                visuals.weak_text_color(),
+            );
         }
     }
 }
 
-fn draw_working_hours_shading(painter: &egui::Painter, rect: egui::Rect, config: &Config, day: NaiveDate) {
+fn draw_working_hours_shading(
+    painter: &egui::Painter,
+    rect: egui::Rect,
+    config: &Config,
+    day: NaiveDate,
+) {
     let weekday = day.weekday().num_days_from_monday() as u8;
-    let Some(ranges) = config.working_hours.get(&weekday) else { return; };
+    let Some(ranges) = config.working_hours.get(&weekday) else {
+        return;
+    };
     painter.rect_filled(rect, 0.0, egui::Color32::from_black_alpha(36));
     for range in ranges {
-        let Ok((sh, sm)) = crate::config::parse_hhmm(&range.start) else { continue; };
-        let Ok((eh, em)) = crate::config::parse_hhmm(&range.end) else { continue; };
+        let Ok((sh, sm)) = crate::config::parse_hhmm(&range.start) else {
+            continue;
+        };
+        let Ok((eh, em)) = crate::config::parse_hhmm(&range.end) else {
+            continue;
+        };
         let s = i64::from(sh * 60 + sm) * 60;
         let e = i64::from(eh * 60 + em) * 60;
-        if e <= s { continue; }
-        let shade = egui::Rect::from_min_max(egui::pos2(sec_to_x(rect, s), rect.top()), egui::pos2(sec_to_x(rect, e), rect.bottom()));
+        if e <= s {
+            continue;
+        }
+        let shade = egui::Rect::from_min_max(
+            egui::pos2(sec_to_x(rect, s), rect.top()),
+            egui::pos2(sec_to_x(rect, e), rect.bottom()),
+        );
         painter.rect_filled(shade, 0.0, egui::Color32::from_white_alpha(28));
     }
 }
 
-fn make_drag_state(t: &db::Tracking, mode: DragMode, start_sec: i64, end_sec: i64, pointer_x: f32) -> DragState {
+fn make_drag_state(
+    t: &db::Tracking,
+    mode: DragMode,
+    start_sec: i64,
+    end_sec: i64,
+    pointer_x: f32,
+) -> DragState {
     DragState {
         tracking_id: t.id,
         mode,
@@ -943,12 +1117,15 @@ fn update_drag_candidate(
     chart_rect: egui::Rect,
     snap_ranges: &[(i64, i64, i64)],
 ) {
-    let pointer_x = ctx.input(|i| i.pointer.latest_pos().map(|p| p.x)).unwrap_or(drag.start_pointer_x);
+    let pointer_x = ctx
+        .input(|i| i.pointer.latest_pos().map(|p| p.x))
+        .unwrap_or(drag.start_pointer_x);
     let dx = pointer_x - drag.start_pointer_x;
     let delta_sec = ((dx / chart_rect.width().max(1.0)) * DAY_SECONDS as f32).round() as i64;
     let snap_enabled = !ctx.input(|i| i.modifiers.alt);
-    let snap_threshold_sec = (((SNAP_THRESHOLD_PX / chart_rect.width().max(1.0)) * DAY_SECONDS as f32).round() as i64)
-        .clamp(MIN_SECONDS, SNAP_STEP_SECONDS);
+    let snap_threshold_sec =
+        (((SNAP_THRESHOLD_PX / chart_rect.width().max(1.0)) * DAY_SECONDS as f32).round() as i64)
+            .clamp(MIN_SECONDS, SNAP_STEP_SECONDS);
     let mut snap_targets: Vec<i64> = Vec::with_capacity(snap_ranges.len() * 2);
     for (id, start_sec, end_sec) in snap_ranges {
         if *id != drag.tracking_id {
@@ -962,7 +1139,9 @@ fn update_drag_candidate(
         snapped = snapped.clamp(min, max);
         for target in &snap_targets {
             let cand = (*target).clamp(min, max);
-            if (cand - raw).abs() <= snap_threshold_sec && (cand - raw).abs() < (snapped - raw).abs() {
+            if (cand - raw).abs() <= snap_threshold_sec
+                && (cand - raw).abs() < (snapped - raw).abs()
+            {
                 snapped = cand;
             }
         }
@@ -1028,7 +1207,8 @@ fn update_drag_candidate(
             drag.candidate_end_sec = drag.orig_end_sec;
         }
         DragMode::ResizeEnd => {
-            let mut e = (drag.orig_end_sec + delta_sec).clamp(drag.orig_start_sec + MIN_SECONDS, DAY_SECONDS);
+            let mut e = (drag.orig_end_sec + delta_sec)
+                .clamp(drag.orig_start_sec + MIN_SECONDS, DAY_SECONDS);
             if snap_enabled {
                 e = nearest_target(e, drag.orig_start_sec + MIN_SECONDS, DAY_SECONDS);
                 drag.snap_lines_sec = [Some(e), None];
@@ -1048,8 +1228,15 @@ fn form_from_tracking(t: &db::Tracking, conn: &rusqlite::Connection) -> Option<T
     let start = parse_local_parts(&t.start_ts)?;
     let end_raw = t.end_ts.as_ref()?;
     let end = parse_local_parts(end_raw)?;
-    let projects: Vec<String> = db::projects(conn).ok()?.into_iter().map(|p| p.name).collect();
-    let selected = projects.iter().position(|p| p == &t.project_name).unwrap_or(0);
+    let projects: Vec<String> = db::projects(conn)
+        .ok()?
+        .into_iter()
+        .map(|p| p.name)
+        .collect();
+    let selected = projects
+        .iter()
+        .position(|p| p == &t.project_name)
+        .unwrap_or(0);
     Some(TrackingForm {
         id: t.id,
         project_name: t.project_name.clone(),
@@ -1063,14 +1250,20 @@ fn form_from_tracking(t: &db::Tracking, conn: &rusqlite::Connection) -> Option<T
     })
 }
 
-fn save_form(conn: &rusqlite::Connection, selected_day: NaiveDate, form: &TrackingForm) -> Result<String, String> {
+fn save_form(
+    conn: &rusqlite::Connection,
+    selected_day: NaiveDate,
+    form: &TrackingForm,
+) -> Result<String, String> {
     if form.project_name.trim().is_empty() {
         return Err("project must not be empty".to_string());
     }
     let st = parse_hhmm_text(&form.start_time, "start")?;
     let et = parse_hhmm_text(&form.end_time, "end")?;
-    let start = compose_local_ts(form.start_date, st).ok_or_else(|| "invalid start timestamp".to_string())?;
-    let end = compose_local_ts(form.end_date, et).ok_or_else(|| "invalid end timestamp".to_string())?;
+    let start = compose_local_ts(form.start_date, st)
+        .ok_or_else(|| "invalid start timestamp".to_string())?;
+    let end =
+        compose_local_ts(form.end_date, et).ok_or_else(|| "invalid end timestamp".to_string())?;
     if end <= start {
         return Err("end must be after start".to_string());
     }
@@ -1079,14 +1272,31 @@ fn save_form(conn: &rusqlite::Connection, selected_day: NaiveDate, form: &Tracki
     }
     let start_s = crate::time::format_ts(&start);
     let end_s = crate::time::format_ts(&end);
-    let overlap = db::has_overlap_for_day(conn, &selected_day.format("%Y-%m-%d").to_string(), Some(form.id), &start_s, &end_s)
-        .map_err(|e| e.to_string())?;
+    let overlap = db::has_overlap_for_day(
+        conn,
+        &selected_day.format("%Y-%m-%d").to_string(),
+        Some(form.id),
+        &start_s,
+        &end_s,
+    )
+    .map_err(|e| e.to_string())?;
     if overlap {
         return Err("tracking overlaps existing entry".to_string());
     }
-    let notes = if form.description.trim().is_empty() { None } else { Some(form.description.trim()) };
-    db::update_tracking_times(conn, form.id, form.project_name.trim(), &start_s, Some(&end_s), notes)
-        .map_err(|e| e.to_string())?;
+    let notes = if form.description.trim().is_empty() {
+        None
+    } else {
+        Some(form.description.trim())
+    };
+    db::update_tracking_times(
+        conn,
+        form.id,
+        form.project_name.trim(),
+        &start_s,
+        Some(&end_s),
+        notes,
+    )
+    .map_err(|e| e.to_string())?;
     Ok("tracking updated".to_string())
 }
 
@@ -1117,13 +1327,20 @@ fn parse_local_parts(raw: &str) -> Option<(NaiveDate, NaiveTime)> {
 }
 
 fn compose_local_ts(date: NaiveDate, time: NaiveTime) -> Option<chrono::DateTime<chrono::Utc>> {
-    let raw = format!("{} {:02}:{:02}:00", date.format("%Y-%m-%d"), time.hour(), time.minute());
+    let raw = format!(
+        "{} {:02}:{:02}:00",
+        date.format("%Y-%m-%d"),
+        time.hour(),
+        time.minute()
+    );
     crate::time::parse_local_ts(&raw).ok()
 }
 
 fn parse_hhmm_text(raw: &str, label: &str) -> Result<NaiveTime, String> {
-    let (h, m) = crate::config::parse_hhmm(raw).map_err(|_| format!("invalid {} time; expected HH:mm", label))?;
-    NaiveTime::from_hms_opt(h, m, 0).ok_or_else(|| format!("invalid {} time; expected HH:mm", label))
+    let (h, m) = crate::config::parse_hhmm(raw)
+        .map_err(|_| format!("invalid {} time; expected HH:mm", label))?;
+    NaiveTime::from_hms_opt(h, m, 0)
+        .ok_or_else(|| format!("invalid {} time; expected HH:mm", label))
 }
 
 fn format_hhmm(time: NaiveTime) -> String {
@@ -1183,15 +1400,13 @@ fn draw_active_drag_tooltip(
         end_label,
         format_duration_hm(duration_secs)
     );
-    let pointer = ctx
-        .input(|i| i.pointer.latest_pos())
-        .unwrap_or(egui::pos2(
-            sec_to_x(
-                chart_rect,
-                (drag.candidate_start_sec + drag.candidate_end_sec) / 2,
-            ),
-            chart_rect.top() + 8.0,
-        ));
+    let pointer = ctx.input(|i| i.pointer.latest_pos()).unwrap_or(egui::pos2(
+        sec_to_x(
+            chart_rect,
+            (drag.candidate_start_sec + drag.candidate_end_sec) / 2,
+        ),
+        chart_rect.top() + 8.0,
+    ));
     let galley = painter.layout(
         text,
         egui::FontId::proportional(12.0),
@@ -1207,7 +1422,10 @@ fn draw_active_drag_tooltip(
         tip_rect = tip_rect.translate(egui::vec2(chart_rect.right() - tip_rect.right() - 4.0, 0.0));
     }
     if tip_rect.bottom() > chart_rect.bottom() {
-        tip_rect = tip_rect.translate(egui::vec2(0.0, chart_rect.bottom() - tip_rect.bottom() - 4.0));
+        tip_rect = tip_rect.translate(egui::vec2(
+            0.0,
+            chart_rect.bottom() - tip_rect.bottom() - 4.0,
+        ));
     }
     if tip_rect.left() < chart_rect.left() {
         tip_rect = tip_rect.translate(egui::vec2(chart_rect.left() - tip_rect.left() + 4.0, 0.0));

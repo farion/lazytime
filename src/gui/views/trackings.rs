@@ -123,8 +123,11 @@ impl TrackingsView {
                         "Cleanup. Merge multiple following trackings for the same project.",
                     )
                     .clicked()
-                    && let Ok(stats) =
-                        cleanup_unsynced_trackings_in_range(&conn, &self.filter_start, &self.filter_end)
+                    && let Ok(stats) = cleanup_unsynced_trackings_in_range(
+                        &conn,
+                        &self.filter_start,
+                        &self.filter_end,
+                    )
                 {
                     message = Some(if stats.removed_rows == 0 {
                         "cleanup: nothing to merge".to_string()
@@ -744,11 +747,7 @@ fn shift_filter_window(filter_start: &mut String, filter_end: &mut String, right
     *filter_end = new_to.format("%Y-%m-%d").to_string();
 }
 
-fn to_table_rows(
-    rows: &[DisplayRow],
-    filter_start: &str,
-    filter_end: &str,
-) -> Vec<Vec<String>> {
+fn to_table_rows(rows: &[DisplayRow], filter_start: &str, filter_end: &str) -> Vec<Vec<String>> {
     let single_day_filter = match (
         NaiveDate::parse_from_str(filter_start.trim(), "%Y-%m-%d"),
         NaiveDate::parse_from_str(filter_end.trim(), "%Y-%m-%d"),

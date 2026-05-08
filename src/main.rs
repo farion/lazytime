@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use lazytime::cli::CliArgs;
-use lazytime::{config::Config, daemon, db, gui, init_logging, jira_sync, time, tui};
+use lazytime::{config::Config, daemon, db, gui, init_logging, jira_sync, platform, time, tui};
 use tokio::time::{Duration, sleep};
 
 #[tokio::main(flavor = "current_thread")]
@@ -25,6 +25,7 @@ async fn main() -> Result<()> {
     db::migrate(&conn)?;
 
     if args.daemon {
+        platform::request_macos_permissions_if_needed();
         tracing::info!("startup: launching daemon mode");
         return daemon::run_daemon(&config).await;
     }
@@ -43,6 +44,7 @@ async fn main() -> Result<()> {
     }
 
     if args.gui || !mode_selected {
+        platform::request_macos_permissions_if_needed();
         tracing::info!("startup: launching gui mode");
         return gui::run(&config, args.config.as_deref());
     }
