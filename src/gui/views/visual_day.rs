@@ -10,6 +10,7 @@ use crate::tui::trackings_cleanup::cleanup_unsynced_trackings_in_range;
 use crate::tui::trackings_storno::storno_tracking;
 
 use super::super::style;
+use super::UndoState;
 
 const DAY_SECONDS: i64 = 24 * 60 * 60;
 const MIN_SECONDS: i64 = 60;
@@ -90,6 +91,7 @@ impl VisualDayView {
         ctx: &egui::Context,
         ui: &mut egui::Ui,
         config: &Config,
+        undo: &mut UndoState,
     ) -> Option<String> {
         let conn = db::open(config.db_path()).ok()?;
         let mut message = None;
@@ -135,20 +137,23 @@ impl VisualDayView {
                     )
                     .on_hover_text("Merge adjacent unsynced trackings for shown day")
                     .clicked()
-                    && let Ok(stats) = cleanup_unsynced_trackings_in_range(
+                {
+                    if let Err(err) = self.remember_undo_state(undo, &conn) {
+                        message = Some(format!("error: {err}"));
+                    } else if let Ok(stats) = cleanup_unsynced_trackings_in_range(
                         &conn,
                         &self.selected_day.format("%Y-%m-%d").to_string(),
                         &self.selected_day.format("%Y-%m-%d").to_string(),
-                    )
-                {
-                    message = Some(if stats.removed_rows == 0 {
-                        "cleanup: nothing to merge".to_string()
-                    } else {
-                        format!(
-                            "cleanup: merged {} groups, removed {} rows",
-                            stats.merged_groups, stats.removed_rows
-                        )
-                    });
+                    ) {
+                        message = Some(if stats.removed_rows == 0 {
+                            "cleanup: nothing to merge".to_string()
+                        } else {
+                            format!(
+                                "cleanup: merged {} groups, removed {} rows",
+                                stats.merged_groups, stats.removed_rows
+                            )
+                        });
+                    }
                 }
             });
         });
@@ -497,18 +502,22 @@ impl VisualDayView {
                                         && let Some((start_s, end_s)) =
                                             sec_range_to_ts(self.selected_day, hour_start, hour_end)
                                     {
-                                        message = Some(
-                                            match db::add_manual_tracking(
-                                                &conn,
-                                                project_name,
-                                                &start_s,
-                                                Some(&end_s),
-                                                None,
-                                            ) {
-                                                Ok(_) => "tracking added".to_string(),
-                                                Err(err) => format!("error: {err}"),
-                                            },
-                                        );
+                                        if let Err(err) = self.remember_undo_state(undo, &conn) {
+                                            message = Some(format!("error: {err}"));
+                                        } else {
+                                            message = Some(
+                                                match db::add_manual_tracking(
+                                                    &conn,
+                                                    project_name,
+                                                    &start_s,
+                                                    Some(&end_s),
+                                                    None,
+                                                ) {
+                                                    Ok(_) => "tracking added".to_string(),
+                                                    Err(err) => format!("error: {err}"),
+                                                },
+                                            );
+                                        }
                                     }
                                 }
                             }
@@ -738,10 +747,14 @@ impl VisualDayView {
                                     ui.close();
                                 }
                                 if ui.button("Storno").clicked() {
-                                    message = Some(match storno_tracking(&conn, config, t) {
-                                        Ok(msg) => msg,
-                                        Err(err) => format!("error: {err}"),
-                                    });
+                                    if let Err(err) = self.remember_undo_state(undo, &conn) {
+                                        message = Some(format!("error: {err}"));
+                                    } else {
+                                        message = Some(match storno_tracking(&conn, config, t) {
+                                            Ok(msg) => msg,
+                                            Err(err) => format!("error: {err}"),
+                                        });
+                                    }
                                     ui.close();
                                 }
                             });
@@ -827,18 +840,22 @@ impl VisualDayView {
                     drag.candidate_start_sec,
                     drag.candidate_end_sec,
                 ) {
-                    let res = db::update_tracking_times(
-                        &conn,
-                        drag.tracking_id,
-                        &drag.candidate_project_name,
-                        &start_s,
-                        Some(&end_s),
-                        drag.notes.as_deref(),
-                    );
-                    message = Some(match res {
-                        Ok(_) => "tracking updated".to_string(),
-                        Err(err) => format!("error: {err}"),
-                    });
+                    if let Err(err) = self.remember_undo_state(undo, &conn) {
+                        message = Some(format!("error: {err}"));
+                    } else {
+                        let res = db::update_tracking_times(
+                            &conn,
+                            drag.tracking_id,
+                            &drag.candidate_project_name,
+                            &start_s,
+                            Some(&end_s),
+                            drag.notes.as_deref(),
+                        );
+                        message = Some(match res {
+                            Ok(_) => "tracking updated".to_string(),
+                            Err(err) => format!("error: {err}"),
+                        });
+                    }
                 }
             }
         }
@@ -974,6 +991,10 @@ impl VisualDayView {
                                     .button(style::icon_label(ui, icons::CHECK, "OK"))
                                     .clicked()
                                 {
+                                    if let Err(err) = self.remember_undo_state(undo, &conn) {
+                                        message = Some(format!("error: {err}"));
+                                        return;
+                                    }
                                     match save_form(&conn, self.selected_day, &form) {
                                         Ok(msg) => {
                                             message = Some(msg);
@@ -1013,6 +1034,10 @@ impl VisualDayView {
                                     .button(style::icon_label(ui, icons::CHECK, "OK"))
                                     .clicked()
                                 {
+                                    if let Err(err) = self.remember_undo_state(undo, &conn) {
+                                        message = Some(format!("error: {err}"));
+                                        return;
+                                    }
                                     if db::delete_tracking(&conn, id).is_ok() {
                                         message = Some("tracking deleted".to_string());
                                     }
@@ -1031,6 +1056,15 @@ impl VisualDayView {
         }
 
         message
+    }
+
+    fn remember_undo_state(
+        &self,
+        undo: &mut UndoState,
+        conn: &rusqlite::Connection,
+    ) -> Result<(), String> {
+        undo.remember_visual_day(conn, self.selected_day)
+            .map_err(|e| e.to_string())
     }
 }
 

@@ -36,6 +36,7 @@ APP_DIR="$WORK_DIR/$APP_NAME"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
+ICON_SOURCE_PNG="$ROOT_DIR/icon_black.png"
 
 ICONSET_DIR="$WORK_DIR/LazyTime.iconset"
 ICON_FILE="$RESOURCES_DIR/LazyTime.icns"
@@ -43,6 +44,11 @@ ICON_FILE="$RESOURCES_DIR/LazyTime.icns"
 mkdir -p "$OUTPUT_DIR"
 rm -rf "$WORK_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$ICONSET_DIR"
+
+if [[ ! -f "$ICON_SOURCE_PNG" ]]; then
+  echo "Icon source not found: $ICON_SOURCE_PNG" >&2
+  exit 1
+fi
 
 cp "$BINARY_PATH" "$MACOS_DIR/$EXECUTABLE_NAME"
 chmod +x "$MACOS_DIR/$EXECUTABLE_NAME"
@@ -84,7 +90,7 @@ PLIST
 
 declare -a SIZES=(16 32 64 128 256 512)
 for s in "${SIZES[@]}"; do
-  swift "$ROOT_DIR/tools/gen-macos-icon.swift" "$s" "$ICONSET_DIR/icon_${s}x${s}.png"
+  sips -z "$s" "$s" "$ICON_SOURCE_PNG" --out "$ICONSET_DIR/icon_${s}x${s}.png" >/dev/null
 done
 cp "$ICONSET_DIR/icon_32x32.png" "$ICONSET_DIR/icon_16x16@2x.png"
 cp "$ICONSET_DIR/icon_64x64.png" "$ICONSET_DIR/icon_32x32@2x.png"

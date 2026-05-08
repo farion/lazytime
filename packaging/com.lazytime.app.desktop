@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=LazyTime
+Comment=Rule-driven automatic time tracking assistant
+Exec=/usr/local/bin/lazytime --gui
+Icon=lazytime
+Terminal=false
+Categories=Office;Utility;
+StartupWMClass=lazytime

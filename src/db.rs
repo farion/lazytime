@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Tracking {
     pub id: i64,
     pub project_name: String,
@@ -14,7 +14,7 @@ pub struct Tracking {
     pub notes: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Project {
     pub id: i64,
     pub name: String,
@@ -22,13 +22,34 @@ pub struct Project {
     pub color: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectRule {
     pub id: i64,
     pub project_id: i64,
     pub app_id: Option<String>,
     pub name_regex: String,
     pub precedence: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrackingSnapshotRow {
+    pub id: i64,
+    pub project_name: String,
+    pub project_id: Option<i64>,
+    pub start_ts: String,
+    pub end_ts: Option<String>,
+    pub created_by: String,
+    pub window_app_id: Option<String>,
+    pub window_instance: Option<String>,
+    pub window_title: Option<String>,
+    pub workspace: Option<String>,
+    pub output: Option<String>,
+    pub jira_synced: i64,
+    pub jira_issue_key: Option<String>,
+    pub jira_worklog_id: Option<String>,
+    pub notes: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -860,4 +881,144 @@ pub fn rules_for_project(conn: &Connection, project_id: i64) -> Result<Vec<Proje
         out.push(row?);
     }
     Ok(out)
+}
+
+pub fn list_all_rules(conn: &Connection) -> Result<Vec<ProjectRule>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, project_id, app_id, name_regex, precedence
+         FROM project_rules
+         ORDER BY project_id ASC, precedence ASC, id ASC",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok(ProjectRule {
+            id: r.get(0)?,
+            project_id: r.get(1)?,
+            app_id: r.get(2)?,
+            name_regex: r.get(3)?,
+            precedence: r.get(4)?,
+        })
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    Ok(out)
+}
+
+pub fn restore_projects_and_rules(
+    conn: &mut Connection,
+    projects: &[Project],
+    rules: &[ProjectRule],
+) -> Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    tx.execute("DELETE FROM project_rules", [])?;
+    tx.execute("DELETE FROM projects", [])?;
+
+    for p in projects {
+        tx.execute(
+            "INSERT INTO projects (id, name, sap_number, color) VALUES (?1, ?2, ?3, ?4)",
+            params![p.id, p.name, p.sap_number, p.color],
+        )?;
+    }
+    for r in rules {
+        tx.execute(
+            "INSERT INTO project_rules (id, project_id, app_id, name_regex, precedence)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![r.id, r.project_id, r.app_id, r.name_regex, r.precedence],
+        )?;
+    }
+
+    tx.commit()?;
+    Ok(())
+}
+
+pub fn snapshot_trackings_for_range(
+    conn: &Connection,
+    start_date: &str,
+    end_date: &str,
+) -> Result<Vec<TrackingSnapshotRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, project_name, project_id, start_ts, end_ts, created_by,
+                window_app_id, window_instance, window_title, workspace, output,
+                jira_synced, jira_issue_key, jira_worklog_id, notes, created_at, updated_at
+         FROM trackings
+         WHERE date(start_ts) >= date(?1) AND date(start_ts) <= date(?2)
+         ORDER BY start_ts ASC, id ASC",
+    )?;
+    let rows = stmt.query_map(params![start_date, end_date], |r| {
+        Ok(TrackingSnapshotRow {
+            id: r.get(0)?,
+            project_name: r.get(1)?,
+            project_id: r.get(2)?,
+            start_ts: r.get(3)?,
+            end_ts: r.get(4)?,
+            created_by: r.get(5)?,
+            window_app_id: r.get(6)?,
+            window_instance: r.get(7)?,
+            window_title: r.get(8)?,
+            workspace: r.get(9)?,
+            output: r.get(10)?,
+            jira_synced: r.get(11)?,
+            jira_issue_key: r.get(12)?,
+            jira_worklog_id: r.get(13)?,
+            notes: r.get(14)?,
+            created_at: r.get(15)?,
+            updated_at: r.get(16)?,
+        })
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    Ok(out)
+}
+
+pub fn restore_trackings_for_range(
+    conn: &mut Connection,
+    start_date: &str,
+    end_date: &str,
+    rows: &[TrackingSnapshotRow],
+) -> Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "DELETE FROM trackings
+         WHERE date(start_ts) >= date(?1) AND date(start_ts) <= date(?2)",
+        params![start_date, end_date],
+    )?;
+
+    for row in rows {
+        tx.execute(
+            "INSERT INTO trackings (
+                id, project_name, project_id, start_ts, end_ts, created_by,
+                window_app_id, window_instance, window_title, workspace, output,
+                jira_synced, jira_issue_key, jira_worklog_id, notes, created_at, updated_at
+             ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6,
+                ?7, ?8, ?9, ?10, ?11,
+                ?12, ?13, ?14, ?15, ?16, ?17
+             )",
+            params![
+                row.id,
+                row.project_name,
+                row.project_id,
+                row.start_ts,
+                row.end_ts,
+                row.created_by,
+                row.window_app_id,
+                row.window_instance,
+                row.window_title,
+                row.workspace,
+                row.output,
+                row.jira_synced,
+                row.jira_issue_key,
+                row.jira_worklog_id,
+                row.notes,
+                row.created_at,
+                row.updated_at,
+            ],
+        )?;
+    }
+
+    tx.commit()?;
+    Ok(())
 }

@@ -24,9 +24,12 @@ enum ViewMode {
 
 pub fn run(config: &Config, config_path: Option<&str>) -> Result<()> {
     tracing::info!("gui startup: preparing native options");
+    let icon_data = eframe::icon_data::from_png_bytes(include_bytes!("../../icon_black.png")).ok();
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("LazyTime GUI")
+            .with_app_id("com.lazytime.app")
+            .with_icon(icon_data.unwrap_or_default())
             .with_inner_size([1280.0, 820.0]),
         ..Default::default()
     };
@@ -57,7 +60,7 @@ pub fn run(config: &Config, config_path: Option<&str>) -> Result<()> {
             cc.egui_ctx.set_fonts(fonts);
             style::apply_base_style(&cc.egui_ctx);
             tracing::info!("gui startup: creating GuiApp state");
-            Ok(Box::new(GuiApp::new(cfg, path)))
+            Ok(Box::new(GuiApp::new(cfg, path, &cc.egui_ctx)))
         }),
     )
     .map_err(|e| anyhow::anyhow!(e.to_string()))?;
@@ -79,6 +82,10 @@ struct GuiApp {
     daemon: views::DaemonView,
     settings: views::SettingsView,
     onboarding: views::OnboardingView,
+    undo: views::UndoState,
+    header_icon_light: Option<egui::TextureHandle>,
+    header_icon_dark: Option<egui::TextureHandle>,
+    header_icon_size: egui::Vec2,
 }
 
 struct ToastMessage {
@@ -87,7 +94,7 @@ struct ToastMessage {
 }
 
 impl GuiApp {
-    fn new(config: Config, config_path: Option<String>) -> Self {
+    fn new(config: Config, config_path: Option<String>, egui_ctx: &egui::Context) -> Self {
         tracing::info!("gui startup: initializing SettingsView");
         let settings = views::SettingsView::new(&config);
         tracing::info!("gui startup: initializing OnboardingView");
@@ -107,7 +114,24 @@ impl GuiApp {
             daemon: views::DaemonView::default(),
             settings,
             onboarding,
+            undo: views::UndoState::new(),
+            header_icon_light: None,
+            header_icon_dark: None,
+            header_icon_size: egui::vec2(0.0, 0.0),
         };
+        let (header_icon_light, header_icon_size) = Self::load_header_icon(
+            egui_ctx,
+            include_bytes!("../../icon_black.png"),
+            "lazytime_header_icon_light",
+        );
+        let (header_icon_dark, _) = Self::load_header_icon(
+            egui_ctx,
+            include_bytes!("../../icon_white.png"),
+            "lazytime_header_icon_dark",
+        );
+        app.header_icon_light = header_icon_light;
+        app.header_icon_dark = header_icon_dark;
+        app.header_icon_size = header_icon_size;
         if app.config.onboarding_done
             && let Some(msg) = app.daemon.auto_start_on_gui_launch(&app.config)
         {
@@ -115,6 +139,22 @@ impl GuiApp {
         }
         tracing::info!("gui startup: GuiApp ready");
         app
+    }
+
+    fn load_header_icon(
+        ctx: &egui::Context,
+        png: &[u8],
+        texture_name: &'static str,
+    ) -> (Option<egui::TextureHandle>, egui::Vec2) {
+        let Some(icon) = eframe::icon_data::from_png_bytes(png).ok() else {
+            return (None, egui::vec2(0.0, 0.0));
+        };
+        let image = crop_transparent_edges(&icon);
+        let texture = ctx.load_texture(texture_name, image, egui::TextureOptions::LINEAR);
+        let target_height = 34.0;
+        let aspect = texture.size()[0] as f32 / texture.size()[1].max(1) as f32;
+        let size = egui::vec2(target_height * aspect, target_height);
+        (Some(texture), size)
     }
 
     fn push_toast(&mut self, text: String) {
@@ -218,9 +258,32 @@ impl GuiApp {
         }
     }
 
-    fn handle_global_shortcuts(&mut self, ctx: &egui::Context) {
+    fn current_undo_domain(&self) -> Option<views::UndoDomain> {
+        match self.mode {
+            ViewMode::Trackings => Some(views::UndoDomain::Trackings),
+            ViewMode::VisualDay => Some(views::UndoDomain::VisualDay),
+            ViewMode::Projects => Some(views::UndoDomain::Projects),
+            _ => None,
+        }
+    }
+
+    fn handle_global_shortcuts(&mut self, ctx: &egui::Context) -> Option<String> {
         if ctx.wants_keyboard_input() {
-            return;
+            return None;
+        }
+
+        if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Z))
+            && let Some(domain) = self.current_undo_domain()
+        {
+            let mut conn = match db::open(self.config.db_path()) {
+                Ok(conn) => conn,
+                Err(err) => return Some(format!("error: {err}")),
+            };
+            return match self.undo.undo(&mut conn, domain) {
+                Ok(Some(msg)) => Some(msg),
+                Ok(None) => Some("nothing to undo".to_string()),
+                Err(err) => Some(format!("error: {err}")),
+            };
         }
 
         if ctx.input(|i| i.key_pressed(egui::Key::C)) {
@@ -247,6 +310,7 @@ impl GuiApp {
         if ctx.input(|i| i.key_pressed(egui::Key::Q)) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
+        None
     }
 
     fn sidebar_entry(
@@ -299,13 +363,28 @@ impl eframe::App for GuiApp {
             return;
         }
 
-        self.handle_global_shortcuts(ctx);
+        if let Some(msg) = self.handle_global_shortcuts(ctx) {
+            self.push_toast(msg);
+        }
         self.daemon.poll(&self.config);
 
         let tracking_title = self.title_tracking_text();
 
         egui::TopBottomPanel::top("gui_top").show(ctx, |ui| {
             ui.horizontal(|ui| {
+                let header_icon = if ctx.style().visuals.dark_mode {
+                    self.header_icon_dark.as_ref()
+                } else {
+                    self.header_icon_light.as_ref()
+                };
+                if let Some(icon) = header_icon {
+                    egui::Frame::NONE
+                        .inner_margin(egui::Margin::symmetric(6, 4))
+                        .show(ui, |ui| {
+                            ui.add(egui::Image::new(icon).fit_to_exact_size(self.header_icon_size));
+                        });
+                    ui.add_space(8.0);
+                }
                 ui.label(egui::RichText::new("LazyTime GUI").size(32.0).strong());
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(egui::RichText::new(&tracking_title).weak());
@@ -465,9 +544,9 @@ impl eframe::App for GuiApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             let msg = match self.mode {
                 ViewMode::Current => self.current.ui(ctx, ui, &self.config),
-                ViewMode::Trackings => self.trackings.ui(ctx, ui, &self.config),
-                ViewMode::VisualDay => self.visual_day.ui(ctx, ui, &self.config),
-                ViewMode::Projects => self.projects.ui(ctx, ui, &self.config),
+                ViewMode::Trackings => self.trackings.ui(ctx, ui, &self.config, &mut self.undo),
+                ViewMode::VisualDay => self.visual_day.ui(ctx, ui, &self.config, &mut self.undo),
+                ViewMode::Projects => self.projects.ui(ctx, ui, &self.config, &mut self.undo),
                 ViewMode::Jira => self.jira.ui(ui, &self.config),
                 ViewMode::Daemon => self.daemon.ui(ui, &self.config),
                 ViewMode::Settings => {
@@ -500,4 +579,45 @@ fn format_duration_hm(secs: i64) -> String {
     let h = secs / 3600;
     let m = (secs % 3600) / 60;
     format!("{}:{:02}", h, m)
+}
+
+fn crop_transparent_edges(icon: &egui::IconData) -> egui::ColorImage {
+    let width = icon.width as usize;
+    let height = icon.height as usize;
+    let mut min_x = width;
+    let mut min_y = height;
+    let mut max_x = 0usize;
+    let mut max_y = 0usize;
+
+    for y in 0..height {
+        for x in 0..width {
+            let alpha = icon.rgba[(y * width + x) * 4 + 3];
+            if alpha > 0 {
+                min_x = min_x.min(x);
+                min_y = min_y.min(y);
+                max_x = max_x.max(x);
+                max_y = max_y.max(y);
+            }
+        }
+    }
+
+    if min_x > max_x || min_y > max_y {
+        return egui::ColorImage::from_rgba_unmultiplied([width, height], &icon.rgba);
+    }
+
+    let cropped_w = max_x - min_x + 1;
+    let cropped_h = max_y - min_y + 1;
+    let mut rgba = vec![0u8; cropped_w * cropped_h * 4];
+
+    for y in 0..cropped_h {
+        let src_y = min_y + y;
+        for x in 0..cropped_w {
+            let src_x = min_x + x;
+            let src = (src_y * width + src_x) * 4;
+            let dst = (y * cropped_w + x) * 4;
+            rgba[dst..dst + 4].copy_from_slice(&icon.rgba[src..src + 4]);
+        }
+    }
+
+    egui::ColorImage::from_rgba_unmultiplied([cropped_w, cropped_h], &rgba)
 }

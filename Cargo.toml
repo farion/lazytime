@@ -71,3 +71,8 @@ tempfile = "3.18"
 [[bin]]
 name = "lazytime"
 path = "src/main.rs"
+
+[target.'cfg(target_os = "windows")'.build-dependencies]
+winresource = "0.1"
+ico = "0.4"
+image = { version = "0.25", default-features = false, features = ["png"] }

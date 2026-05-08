@@ -32,6 +32,11 @@ fpm \
   --license "MIT" \
   --maintainer "lazytime" \
   --prefix /usr/local \
-  "${BIN_PATH}=/bin/lazytime"
+  "${BIN_PATH}=/bin/lazytime" \
+  "icon_black.png=/share/icons/hicolor/512x512/apps/lazytime.png" \
+  "icon_black.svg=/share/icons/hicolor/scalable/apps/lazytime.svg" \
+  "icon_white.png=/share/icons/hicolor/512x512/apps/lazytime-white.png" \
+  "icon_white.svg=/share/icons/hicolor/scalable/apps/lazytime-white.svg" \
+  "packaging/com.lazytime.app.desktop=/share/applications/com.lazytime.app.desktop"
 
 echo "${RPM_PATH}"

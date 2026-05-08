@@ -6,6 +6,7 @@ use crate::db;
 
 use super::super::style;
 use super::super::table::{self, RowAction};
+use super::UndoState;
 
 const DIALOG_LABEL_WIDTH: f32 = 110.0;
 
@@ -48,6 +49,7 @@ impl ProjectsView {
         ctx: &egui::Context,
         ui: &mut egui::Ui,
         config: &crate::config::Config,
+        undo: &mut UndoState,
     ) -> Option<String> {
         let conn = db::open(config.db_path()).ok()?;
         let mut projects = db::projects(&conn).unwrap_or_default();
@@ -60,7 +62,7 @@ impl ProjectsView {
         let mut message = None;
         let has_projects = !projects.is_empty();
 
-        self.handle_keys(ctx, &projects, &conn);
+        self.handle_keys(ctx, &projects, &conn, undo);
 
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Projects").size(18.0).strong());
@@ -287,6 +289,10 @@ impl ProjectsView {
                                 if modal.name.trim().is_empty() {
                                     message = Some("project name must not be empty".to_string());
                                 } else {
+                                    if let Err(err) = undo.remember_projects(&conn) {
+                                        message = Some(format!("error: {err}"));
+                                        return;
+                                    }
                                     let sap = if modal.sap.trim().is_empty() {
                                         None
                                     } else {
@@ -395,6 +401,10 @@ impl ProjectsView {
                                 if let Err(err) = Regex::new(modal.name_regex.trim()) {
                                     message = Some(format!("error: {err}"));
                                 } else {
+                                    if let Err(err) = undo.remember_projects(&conn) {
+                                        message = Some(format!("error: {err}"));
+                                        return;
+                                    }
                                     let precedence = match modal.precedence.trim().parse::<i64>() {
                                         Ok(v) => v,
                                         Err(_) => {
@@ -473,9 +483,19 @@ impl ProjectsView {
                                 {
                                     let res = match action {
                                         ConfirmAction::DeleteProject(id) => {
+                                            if let Err(err) = undo.remember_projects(&conn) {
+                                                message = Some(format!("error: {err}"));
+                                                return;
+                                            }
                                             db::delete_project(&conn, id)
                                         }
-                                        ConfirmAction::DeleteRule(id) => db::delete_rule(&conn, id),
+                                        ConfirmAction::DeleteRule(id) => {
+                                            if let Err(err) = undo.remember_projects(&conn) {
+                                                message = Some(format!("error: {err}"));
+                                                return;
+                                            }
+                                            db::delete_rule(&conn, id)
+                                        }
                                     };
                                     if let Err(err) = res {
                                         message = Some(format!("error: {err}"));
@@ -654,6 +674,7 @@ impl ProjectsView {
         ctx: &egui::Context,
         projects: &[db::Project],
         conn: &rusqlite::Connection,
+        undo: &mut UndoState,
     ) {
         if self.project_modal.is_some() || self.rule_modal.is_some() || self.confirm_modal.is_some()
         {
@@ -746,5 +767,7 @@ impl ProjectsView {
             self.rules_modal_open = true;
             self.selected_rule = 0;
         }
+
+        let _ = undo;
     }
 }

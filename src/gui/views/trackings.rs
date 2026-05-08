@@ -11,6 +11,7 @@ use crate::tui::trackings_storno::storno_tracking;
 
 use super::super::style;
 use super::super::table::{self, ContextMenuConfig, ContextMenuState, RowAction};
+use super::UndoState;
 
 const DIALOG_LABEL_WIDTH: f32 = 110.0;
 const DATE_FIELD_WIDTH: f32 = 124.0;
@@ -48,6 +49,7 @@ impl TrackingsView {
         ctx: &egui::Context,
         ui: &mut egui::Ui,
         config: &Config,
+        undo: &mut UndoState,
     ) -> Option<String> {
         if self.filter_start.is_empty() || self.filter_end.is_empty() {
             let today = Local::now().date_naive().format("%Y-%m-%d").to_string();
@@ -70,7 +72,7 @@ impl TrackingsView {
         }
 
         let mut message = None;
-        self.handle_keys(ctx, &rows, &conn, config, &mut message);
+        self.handle_keys(ctx, &rows, &conn, config, undo, &mut message);
 
         let selected_tracking = matches!(rows.get(self.selected), Some(DisplayRow::Tracking(_)));
         let selected_tracking_unsynced = selected_tracking && !self.selected_tracking_synced(&rows);
@@ -123,20 +125,21 @@ impl TrackingsView {
                         "Cleanup. Merge multiple following trackings for the same project.",
                     )
                     .clicked()
-                    && let Ok(stats) = cleanup_unsynced_trackings_in_range(
-                        &conn,
-                        &self.filter_start,
-                        &self.filter_end,
-                    )
                 {
-                    message = Some(if stats.removed_rows == 0 {
-                        "cleanup: nothing to merge".to_string()
-                    } else {
-                        format!(
-                            "cleanup: merged {} groups, removed {} rows",
-                            stats.merged_groups, stats.removed_rows
-                        )
-                    });
+                    if let Err(err) = self.remember_undo_state(undo, &conn) {
+                        message = Some(format!("error: {err}"));
+                    } else if let Ok(stats) =
+                        cleanup_unsynced_trackings_in_range(&conn, &self.filter_start, &self.filter_end)
+                    {
+                        message = Some(if stats.removed_rows == 0 {
+                            "cleanup: nothing to merge".to_string()
+                        } else {
+                            format!(
+                                "cleanup: merged {} groups, removed {} rows",
+                                stats.merged_groups, stats.removed_rows
+                            )
+                        });
+                    }
                 }
                 ui.separator();
                 if ui
@@ -148,10 +151,14 @@ impl TrackingsView {
                     .clicked()
                     && let Some(DisplayRow::Tracking(t)) = rows.get(self.selected)
                 {
+                    if let Err(err) = self.remember_undo_state(undo, &conn) {
+                        message = Some(format!("error: {err}"));
+                    } else {
                     message = Some(match storno_tracking(&conn, config, t) {
                         Ok(msg) => msg,
                         Err(err) => format!("error: {err}"),
                     });
+                    }
                 }
                 if ui
                     .add_enabled(
@@ -253,10 +260,14 @@ impl TrackingsView {
                 RowAction::Storno(idx) => {
                     self.selected = idx;
                     if let Some(DisplayRow::Tracking(t)) = rows.get(idx) {
-                        message = Some(match storno_tracking(&conn, config, t) {
-                            Ok(msg) => msg,
-                            Err(err) => format!("error: {err}"),
-                        });
+                        if let Err(err) = self.remember_undo_state(undo, &conn) {
+                            message = Some(format!("error: {err}"));
+                        } else {
+                            message = Some(match storno_tracking(&conn, config, t) {
+                                Ok(msg) => msg,
+                                Err(err) => format!("error: {err}"),
+                            });
+                        }
                     }
                 }
             }
@@ -491,6 +502,10 @@ impl TrackingsView {
                                 .button(style::icon_label(ui, icons::CHECK, "OK"))
                                 .clicked()
                             {
+                                if let Err(err) = self.remember_undo_state(undo, &conn) {
+                                    message = Some(format!("error: {err}"));
+                                    return;
+                                }
                                 match save_form(&conn, &form) {
                                     Ok(msg) => {
                                         if let Some(id) = form.id {
@@ -537,6 +552,10 @@ impl TrackingsView {
                                     .button(style::icon_label(ui, icons::CHECK, "OK"))
                                     .clicked()
                                 {
+                                    if let Err(err) = self.remember_undo_state(undo, &conn) {
+                                        message = Some(format!("error: {err}"));
+                                        return;
+                                    }
                                     if db::delete_tracking(&conn, id).is_ok() {
                                         message = Some("tracking deleted".to_string());
                                     }
@@ -564,6 +583,7 @@ impl TrackingsView {
         rows: &[DisplayRow],
         conn: &rusqlite::Connection,
         config: &Config,
+        undo: &mut UndoState,
         message: &mut Option<String>,
     ) {
         if self.filter_modal || self.edit_modal.is_some() || self.confirm_delete_id.is_some() {
@@ -592,25 +612,33 @@ impl TrackingsView {
             self.show_gaps = !self.show_gaps;
         }
         if ctx.input(|i| i.key_pressed(egui::Key::L))
-            && let Ok(stats) =
-                cleanup_unsynced_trackings_in_range(conn, &self.filter_start, &self.filter_end)
         {
-            *message = Some(if stats.removed_rows == 0 {
-                "cleanup: nothing to merge".to_string()
-            } else {
-                format!(
-                    "cleanup: merged {} groups, removed {} rows",
-                    stats.merged_groups, stats.removed_rows
-                )
-            });
+            if let Err(err) = self.remember_undo_state(undo, conn) {
+                *message = Some(format!("error: {err}"));
+            } else if let Ok(stats) =
+                cleanup_unsynced_trackings_in_range(conn, &self.filter_start, &self.filter_end)
+            {
+                *message = Some(if stats.removed_rows == 0 {
+                    "cleanup: nothing to merge".to_string()
+                } else {
+                    format!(
+                        "cleanup: merged {} groups, removed {} rows",
+                        stats.merged_groups, stats.removed_rows
+                    )
+                });
+            }
         }
         if ctx.input(|i| i.key_pressed(egui::Key::S))
             && let Some(DisplayRow::Tracking(t)) = rows.get(self.selected)
         {
-            *message = Some(match storno_tracking(conn, config, t) {
-                Ok(msg) => msg,
-                Err(err) => format!("error: {err}"),
-            });
+            if let Err(err) = self.remember_undo_state(undo, conn) {
+                *message = Some(format!("error: {err}"));
+            } else {
+                *message = Some(match storno_tracking(conn, config, t) {
+                    Ok(msg) => msg,
+                    Err(err) => format!("error: {err}"),
+                });
+            }
         }
         if ctx.input(|i| i.key_pressed(egui::Key::A)) {
             self.edit_modal = Some(self.new_form(conn, rows.get(self.selected)));
@@ -724,6 +752,15 @@ impl TrackingsView {
             projects,
             selected_project,
         })
+    }
+
+    fn remember_undo_state(
+        &self,
+        undo: &mut UndoState,
+        conn: &rusqlite::Connection,
+    ) -> Result<(), String> {
+        undo.remember_trackings_range(conn, &self.filter_start, &self.filter_end)
+            .map_err(|e| e.to_string())
     }
 }
 

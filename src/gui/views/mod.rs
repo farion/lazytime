@@ -5,6 +5,7 @@ mod onboarding;
 mod projects;
 mod settings;
 mod trackings;
+mod undo;
 mod visual_day;
 
 pub use current::CurrentView;
@@ -14,4 +15,5 @@ pub use onboarding::OnboardingView;
 pub use projects::ProjectsView;
 pub use settings::SettingsView;
 pub use trackings::TrackingsView;
+pub use undo::{UndoDomain, UndoState};
 pub use visual_day::VisualDayView;

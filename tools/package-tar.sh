@@ -15,9 +15,19 @@ OUTDIR="$5"
 ARTIFACT_BASE="lazytime-${VERSION}-linux-${ARCH}-${VARIANT}"
 STAGE_DIR="${OUTDIR}/${ARTIFACT_BASE}"
 
-mkdir -p "${STAGE_DIR}/bin" "${STAGE_DIR}/share/doc/lazytime"
+mkdir -p \
+  "${STAGE_DIR}/bin" \
+  "${STAGE_DIR}/share/doc/lazytime" \
+  "${STAGE_DIR}/share/icons/hicolor/512x512/apps" \
+  "${STAGE_DIR}/share/icons/hicolor/scalable/apps" \
+  "${STAGE_DIR}/share/applications"
 cp "${BIN_PATH}" "${STAGE_DIR}/bin/lazytime"
 cp README.md "${STAGE_DIR}/share/doc/lazytime/README.md"
+cp icon_black.png "${STAGE_DIR}/share/icons/hicolor/512x512/apps/lazytime.png"
+cp icon_black.svg "${STAGE_DIR}/share/icons/hicolor/scalable/apps/lazytime.svg"
+cp icon_white.png "${STAGE_DIR}/share/icons/hicolor/512x512/apps/lazytime-white.png"
+cp icon_white.svg "${STAGE_DIR}/share/icons/hicolor/scalable/apps/lazytime-white.svg"
+cp packaging/com.lazytime.app.desktop "${STAGE_DIR}/share/applications/com.lazytime.app.desktop"
 
 if [[ -f LICENSE ]]; then
   cp LICENSE "${STAGE_DIR}/share/doc/lazytime/LICENSE"
