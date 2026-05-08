@@ -8,7 +8,7 @@ use ratatui::widgets::{Block, Borders, Cell, Padding, Row, Table};
 
 use crate::config::Config;
 use crate::db;
-use crate::tui::trackings_cleanup::cleanup_today_unsynced_trackings;
+use crate::tui::trackings_cleanup::cleanup_unsynced_trackings_in_range;
 use crate::tui::trackings_modal::{
     ConfirmModal, FilterModal, TrackingModal, TrackingsModal, format_storage_ts_for_tui,
 };
@@ -426,7 +426,11 @@ impl TrackingsState {
                 return Ok(true);
             }
             KeyCode::Char('l') => {
-                let stats = cleanup_today_unsynced_trackings(conn, config)?;
+                let stats = cleanup_unsynced_trackings_in_range(
+                    conn,
+                    &self.filter_start,
+                    &self.filter_end,
+                )?;
                 if stats.removed_rows == 0 {
                     self.message = "cleanup: nothing to merge".to_string();
                 } else {

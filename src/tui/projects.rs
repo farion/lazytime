@@ -60,6 +60,7 @@ impl ProjectsState {
                     Style::default()
                 };
                 Row::new(vec![
+                    Cell::from(p.color.clone().unwrap_or_default()),
                     Cell::from(p.name.clone()),
                     Cell::from(p.sap_number.clone().unwrap_or_default()),
                 ])
@@ -100,9 +101,14 @@ impl ProjectsState {
 
         let projects_table = Table::new(
             project_rows,
-            [Constraint::Length(40), Constraint::Length(24)],
+            [
+                Constraint::Length(10),
+                Constraint::Length(36),
+                Constraint::Length(24),
+            ],
         )
         .header(Row::new(vec![
+            Cell::from("Color ").style(Style::default().add_modifier(Modifier::BOLD)),
             Cell::from("Project ").style(Style::default().add_modifier(Modifier::BOLD)),
             Cell::from("SAP Number ").style(Style::default().add_modifier(Modifier::BOLD)),
         ]))
@@ -236,7 +242,7 @@ impl ProjectsState {
         if let Some(modal) = &self.modal {
             let mw = (area.width / 2).min(90).max(44);
             let desired_mh = match modal {
-                ProjectsModal::Project(_) => 6u16,
+                ProjectsModal::Project(_) => 7u16,
                 ProjectsModal::Rule(_) => 7u16,
                 ProjectsModal::Confirm(_) => 6u16,
             };
@@ -264,11 +270,16 @@ impl ProjectsState {
                             if m.field_idx == 1 { "> " } else { "  " },
                             m.sap
                         ),
+                        format!(
+                            "Color: {}{}",
+                            if m.field_idx == 2 { "> " } else { "  " },
+                            m.color
+                        ),
                         "".to_string(),
                         format!(
                             "{}OK   {}CANCEL",
-                            if m.field_idx == 2 { "> " } else { "  " },
-                            if m.field_idx == 3 { "> " } else { "  " }
+                            if m.field_idx == 3 { "> " } else { "  " },
+                            if m.field_idx == 4 { "> " } else { "  " }
                         ),
                     ];
                     let title = match m.mode {
@@ -419,6 +430,7 @@ impl ProjectsState {
                         selected.id,
                         selected.name.clone(),
                         selected.sap_number.clone().unwrap_or_default(),
+                        selected.color.clone().unwrap_or_default(),
                     )));
                     return Ok(false);
                 } else {
@@ -531,6 +543,8 @@ impl ProjectsState {
                         m.name.push(c);
                     } else if m.field_idx == 1 {
                         m.sap.push(c);
+                    } else if m.field_idx == 2 {
+                        m.color.push(c);
                     }
                     return Ok((Some(modal), false));
                 }
@@ -539,19 +553,21 @@ impl ProjectsState {
                         m.name.pop();
                     } else if m.field_idx == 1 {
                         m.sap.pop();
+                    } else if m.field_idx == 2 {
+                        m.color.pop();
                     }
                     return Ok((Some(modal), false));
                 }
                 KeyCode::Tab | KeyCode::Down => {
-                    m.field_idx = (m.field_idx + 1) % 4;
+                    m.field_idx = (m.field_idx + 1) % 5;
                     return Ok((Some(modal), false));
                 }
                 KeyCode::Up => {
-                    m.field_idx = if m.field_idx == 0 { 3 } else { m.field_idx - 1 };
+                    m.field_idx = if m.field_idx == 0 { 4 } else { m.field_idx - 1 };
                     return Ok((Some(modal), false));
                 }
                 KeyCode::Enter => {
-                    if m.field_idx == 2 {
+                    if m.field_idx == 3 {
                         if m.name.trim().is_empty() {
                             self.message = "project name must not be empty".to_string();
                             return Ok((Some(modal), false));
@@ -561,11 +577,22 @@ impl ProjectsState {
                         } else {
                             Some(m.sap.as_str())
                         };
+                        let color_upper = m.color.trim().to_ascii_uppercase();
+                        let color = if color_upper.is_empty() {
+                            None
+                        } else if valid_hex_color(&color_upper) {
+                            Some(color_upper)
+                        } else {
+                            self.message = "invalid color; expected #RRGGBB".to_string();
+                            return Ok((Some(modal), false));
+                        };
                         match m.mode {
-                            ProjectModalMode::Add => db::add_project(conn, &m.name, sap)?,
+                            ProjectModalMode::Add => {
+                                db::add_project(conn, &m.name, sap, color.as_deref())?
+                            }
                             ProjectModalMode::Edit => {
                                 if let Some(id) = m.editing_id {
-                                    db::update_project(conn, id, &m.name, sap)?;
+                                    db::update_project(conn, id, &m.name, sap, color.as_deref())?;
                                 }
                             }
                         }
@@ -576,7 +603,7 @@ impl ProjectsState {
                         .to_string();
                         return Ok((None, true));
                     }
-                    if m.field_idx == 3 {
+                    if m.field_idx == 4 {
                         self.message = "cancelled".to_string();
                         return Ok((None, false));
                     }
@@ -704,6 +731,12 @@ impl ProjectsState {
             },
         }
     }
+}
+
+fn valid_hex_color(value: &str) -> bool {
+    value.len() == 7
+        && value.starts_with('#')
+        && value.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit)
 }
 
 // interactive prompt helper removed in favor of in-TUI modals

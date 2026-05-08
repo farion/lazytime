@@ -28,10 +28,7 @@ pub fn storno_tracking(
         .jira_url
         .clone()
         .context("jira_url is required for storno")?;
-    let jira_token = crate::secrets::load_jira_token()
-        .ok()
-        .flatten()
-        .or_else(|| config.jira_token.clone())
+    let jira_token = crate::secrets::effective_jira_token(config.jira_token.as_deref())
         .context("jira_token is required for storno")?;
 
     let (start, seconds) = tracking_timing(tracking)?;

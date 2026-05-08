@@ -6,6 +6,7 @@ use tokio::time::{Duration, sleep};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
+    eprintln!("[lazytime] startup: parse cli args");
     let args = CliArgs::parse();
     // Initialize logging with optional CLI override. If --loglevel is set, export it
     // to RUST_LOG so tracing_subscriber's EnvFilter picks it up.
@@ -14,12 +15,17 @@ async fn main() -> Result<()> {
         // std::env::set_var is considered unsafe in some toolchains; perform in unsafe block.
         unsafe { std::env::set_var("RUST_LOG", lvl) };
     }
+    eprintln!("[lazytime] startup: init logging");
     init_logging();
+    tracing::info!("startup: loading config");
     let config = Config::from_path(args.config.as_deref())?;
+    tracing::info!(db_path = %config.db_path().display(), "startup: opening database");
     let conn = db::open(config.db_path())?;
+    tracing::info!("startup: applying database migrations");
     db::migrate(&conn)?;
 
     if args.daemon {
+        tracing::info!("startup: launching daemon mode");
         return daemon::run_daemon(&config).await;
     }
 
@@ -32,10 +38,12 @@ async fn main() -> Result<()> {
         || args.waybar_state;
 
     if args.tui {
+        tracing::info!("startup: launching tui mode");
         return tui::run(&config, args.config.as_deref());
     }
 
     if args.gui || !mode_selected {
+        tracing::info!("startup: launching gui mode");
         return gui::run(&config, args.config.as_deref());
     }
 

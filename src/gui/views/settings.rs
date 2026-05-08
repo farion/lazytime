@@ -70,6 +70,7 @@ struct SettingsEdit {
 
 impl SettingsView {
     pub fn new(cfg: &Config) -> Self {
+        tracing::info!("gui startup: settings view init start");
         Self {
             theme_preference: cfg.theme_preference.clone(),
             sidebar_collapsed: cfg.sidebar_collapsed,
@@ -229,11 +230,7 @@ impl SettingsView {
         if cfg_diff {
             return true;
         }
-        let stored_token = secrets::load_jira_token()
-            .ok()
-            .flatten()
-            .or_else(|| config.jira_token.clone())
-            .unwrap_or_default();
+        let stored_token = config.jira_token.clone().unwrap_or_default();
         self.edit.jira_token.trim() != stored_token.trim()
     }
 }
@@ -262,11 +259,7 @@ impl SettingsEdit {
             report_end: cfg.report_end.clone().unwrap_or_default(),
             db_file: cfg.db_file.clone(),
             jira_url: cfg.jira_url.clone().unwrap_or_default(),
-            jira_token: secrets::load_jira_token()
-                .ok()
-                .flatten()
-                .or_else(|| cfg.jira_token.clone())
-                .unwrap_or_default(),
+            jira_token: cfg.jira_token.clone().unwrap_or_default(),
             jira_token_masked: true,
             jira_email: cfg.jira_email.clone().unwrap_or_default(),
             jira_project: cfg.jira_project.clone().unwrap_or_default(),
@@ -345,15 +338,11 @@ fn to_opt(raw: &str) -> Option<String> {
 }
 
 fn save_config(
-    next: Config,
+    mut next: Config,
     jira_token: &str,
     config_path: Option<&str>,
 ) -> Result<(Config, PathBuf), String> {
-    if jira_token.trim().is_empty() {
-        secrets::clear_jira_token().map_err(|e| e.to_string())?;
-    } else {
-        secrets::store_jira_token(jira_token).map_err(|e| e.to_string())?;
-    }
+    secrets::persist_jira_token(jira_token, &mut next.jira_token);
     let p = resolve_config_path(config_path);
     if let Some(parent) = p.parent() {
         fs::create_dir_all(parent).map_err(|_| format!("failed to create {}", parent.display()))?;

@@ -155,7 +155,11 @@ impl CurrentView {
                     .ok()
                     .map(|s| now.signed_duration_since(s).num_seconds().max(0))
                     .unwrap_or(0);
-                ui.label(format!("{} | {}", a.project_name, format_duration(cur)));
+                ui.label(
+                    egui::RichText::new(format!("{} | {}", a.project_name, format_duration(cur)))
+                        .size(28.0)
+                        .strong(),
+                );
             } else {
                 ui.label("(none)");
             }

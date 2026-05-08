@@ -176,11 +176,43 @@ pub fn render_table(
                     style::BUTTON_PAD_Y,
                 ))
                 .show(ui, |ui| {
-                    ui.add(
-                        egui::Label::new(text)
-                            .selectable(false)
-                            .sense(egui::Sense::click()),
-                    )
+                    let raw = self
+                        .rows
+                        .get(row_nr)
+                        .and_then(|r| r.get(cell.col_nr))
+                        .cloned()
+                        .unwrap_or_default();
+                    if let Some(color) = super::color::color32_from_hex(&raw) {
+                        ui.horizontal(|ui| {
+                            let swatch_size = egui::vec2(12.0, 12.0);
+                            let (rect, _) =
+                                ui.allocate_exact_size(swatch_size, egui::Sense::hover());
+                            ui.painter().rect_filled(rect, 2.0, color);
+                            ui.painter().rect_stroke(
+                                rect,
+                                2.0,
+                                egui::Stroke::new(
+                                    1.0,
+                                    ui.visuals().widgets.noninteractive.bg_stroke.color,
+                                ),
+                                egui::StrokeKind::Outside,
+                            );
+                            if !raw.is_empty() {
+                                ui.label(egui::RichText::new(raw).monospace().color(if dim_row {
+                                    ui.visuals().weak_text_color()
+                                } else {
+                                    ui.visuals().text_color()
+                                }));
+                            }
+                        })
+                        .response
+                    } else {
+                        ui.add(
+                            egui::Label::new(text)
+                                .selectable(false)
+                                .sense(egui::Sense::click()),
+                        )
+                    }
                 })
                 .inner;
 

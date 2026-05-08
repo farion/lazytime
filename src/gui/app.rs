@@ -1,4 +1,5 @@
 use anyhow::Result;
+use chrono::Utc;
 use eframe::egui;
 use egui_phosphor_icons::icons;
 use std::time::{Duration, Instant};
@@ -14,6 +15,7 @@ use super::views;
 enum ViewMode {
     Current,
     Trackings,
+    VisualDay,
     Projects,
     Jira,
     Daemon,
@@ -21,6 +23,7 @@ enum ViewMode {
 }
 
 pub fn run(config: &Config, config_path: Option<&str>) -> Result<()> {
+    tracing::info!("gui startup: preparing native options");
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("LazyTime GUI")
@@ -30,10 +33,12 @@ pub fn run(config: &Config, config_path: Option<&str>) -> Result<()> {
 
     let cfg = config.clone();
     let path = config_path.map(ToString::to_string);
+    tracing::info!("gui startup: entering eframe::run_native");
     eframe::run_native(
         "LazyTime GUI",
         native_options,
         Box::new(move |cc| {
+            tracing::info!("gui startup: eframe app creator invoked");
             let mut fonts = egui::FontDefinitions::default();
             egui_phosphor_icons::add_fonts(&mut fonts);
             let icon_family = egui::FontFamily::Name("phosphor-regular".into());
@@ -51,6 +56,7 @@ pub fn run(config: &Config, config_path: Option<&str>) -> Result<()> {
             }
             cc.egui_ctx.set_fonts(fonts);
             style::apply_base_style(&cc.egui_ctx);
+            tracing::info!("gui startup: creating GuiApp state");
             Ok(Box::new(GuiApp::new(cfg, path)))
         }),
     )
@@ -67,6 +73,7 @@ struct GuiApp {
     toast: Option<ToastMessage>,
     current: views::CurrentView,
     trackings: views::TrackingsView,
+    visual_day: views::VisualDayView,
     projects: views::ProjectsView,
     jira: views::JiraSyncView,
     daemon: views::DaemonView,
@@ -81,8 +88,11 @@ struct ToastMessage {
 
 impl GuiApp {
     fn new(config: Config, config_path: Option<String>) -> Self {
+        tracing::info!("gui startup: initializing SettingsView");
         let settings = views::SettingsView::new(&config);
+        tracing::info!("gui startup: initializing OnboardingView");
         let onboarding = views::OnboardingView::new(&config);
+        tracing::info!("gui startup: constructing app shell");
         let mut app = Self {
             config,
             config_path,
@@ -91,6 +101,7 @@ impl GuiApp {
             toast: None,
             current: views::CurrentView::default(),
             trackings: views::TrackingsView::default(),
+            visual_day: views::VisualDayView::default(),
             projects: views::ProjectsView::default(),
             jira: views::JiraSyncView::default(),
             daemon: views::DaemonView::default(),
@@ -102,6 +113,7 @@ impl GuiApp {
         {
             app.push_toast(msg);
         }
+        tracing::info!("gui startup: GuiApp ready");
         app
     }
 
@@ -165,6 +177,47 @@ impl GuiApp {
         self.mode = mode;
     }
 
+    fn title_tracking_text(&self) -> String {
+        let Ok(conn) = db::open(self.config.db_path()) else {
+            return "(none) 0:00 | 0:00".to_string();
+        };
+
+        let now = Utc::now();
+        let total_secs = db::list_today(&conn)
+            .ok()
+            .map(|rows| {
+                rows.into_iter().fold(0i64, |acc, row| {
+                    let start = crate::time::parse_ts(&row.start_ts).ok();
+                    let end = row
+                        .end_ts
+                        .as_ref()
+                        .and_then(|e| crate::time::parse_ts(e).ok())
+                        .or(Some(now));
+                    match (start, end) {
+                        (Some(s), Some(e)) => acc + e.signed_duration_since(s).num_seconds().max(0),
+                        _ => acc,
+                    }
+                })
+            })
+            .unwrap_or(0);
+        let total_text = format_duration_hm(total_secs);
+
+        if let Ok(Some(active)) = db::get_active_tracking(&conn) {
+            let current_secs = crate::time::parse_ts(&active.start_ts)
+                .ok()
+                .map(|s| now.signed_duration_since(s).num_seconds().max(0))
+                .unwrap_or(0);
+            format!(
+                "{} {} | {}",
+                active.project_name,
+                format_duration_hm(current_secs),
+                total_text
+            )
+        } else {
+            format!("(none) 0:00 | {}", total_text)
+        }
+    }
+
     fn handle_global_shortcuts(&mut self, ctx: &egui::Context) {
         if ctx.wants_keyboard_input() {
             return;
@@ -175,6 +228,9 @@ impl GuiApp {
         }
         if ctx.input(|i| i.key_pressed(egui::Key::T)) {
             self.set_mode(ViewMode::Trackings);
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::V)) {
+            self.set_mode(ViewMode::VisualDay);
         }
         if ctx.input(|i| i.key_pressed(egui::Key::P)) {
             self.set_mode(ViewMode::Projects);
@@ -246,9 +302,14 @@ impl eframe::App for GuiApp {
         self.handle_global_shortcuts(ctx);
         self.daemon.poll(&self.config);
 
+        let tracking_title = self.title_tracking_text();
+
         egui::TopBottomPanel::top("gui_top").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("LazyTime GUI").size(32.0).strong());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(egui::RichText::new(&tracking_title).weak());
+                });
             });
         });
 
@@ -312,6 +373,17 @@ impl eframe::App for GuiApp {
                 .clicked()
                 {
                     self.set_mode(ViewMode::Trackings);
+                }
+                if Self::sidebar_entry(
+                    ui,
+                    collapsed,
+                    self.mode == ViewMode::VisualDay,
+                    icons::CHART_BAR_HORIZONTAL,
+                    "Visual Day",
+                )
+                .clicked()
+                {
+                    self.set_mode(ViewMode::VisualDay);
                 }
                 if Self::sidebar_entry(
                     ui,
@@ -394,6 +466,7 @@ impl eframe::App for GuiApp {
             let msg = match self.mode {
                 ViewMode::Current => self.current.ui(ctx, ui, &self.config),
                 ViewMode::Trackings => self.trackings.ui(ctx, ui, &self.config),
+                ViewMode::VisualDay => self.visual_day.ui(ctx, ui, &self.config),
                 ViewMode::Projects => self.projects.ui(ctx, ui, &self.config),
                 ViewMode::Jira => self.jira.ui(ui, &self.config),
                 ViewMode::Daemon => self.daemon.ui(ui, &self.config),
@@ -421,4 +494,10 @@ impl eframe::App for GuiApp {
             let _ = db::migrate(&conn);
         }
     }
+}
+
+fn format_duration_hm(secs: i64) -> String {
+    let h = secs / 3600;
+    let m = (secs % 3600) / 60;
+    format!("{}:{:02}", h, m)
 }

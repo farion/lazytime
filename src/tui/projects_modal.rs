@@ -51,7 +51,8 @@ pub struct ProjectModal {
     pub mode: ProjectModalMode,
     pub name: String,
     pub sap: String,
-    // 0=name,1=sap,2=ok,3=cancel
+    pub color: String,
+    // 0=name,1=sap,2=color,3=ok,4=cancel
     pub field_idx: usize,
     pub editing_id: Option<i64>,
 }
@@ -62,16 +63,18 @@ impl ProjectModal {
             mode: ProjectModalMode::Add,
             name: String::new(),
             sap: String::new(),
+            color: String::new(),
             field_idx: 0,
             editing_id: None,
         }
     }
 
-    pub fn new_edit(id: i64, name: String, sap: String) -> Self {
+    pub fn new_edit(id: i64, name: String, sap: String, color: String) -> Self {
         Self {
             mode: ProjectModalMode::Edit,
             name,
             sap,
+            color,
             field_idx: 0,
             editing_id: Some(id),
         }

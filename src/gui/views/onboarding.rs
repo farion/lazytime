@@ -29,6 +29,7 @@ pub struct OnboardingView {
 
 impl OnboardingView {
     pub fn new(config: &Config) -> Self {
+        tracing::info!("gui startup: onboarding view init start");
         let mut view = Self {
             step: 0,
             morning_start: "08:00".to_string(),
@@ -46,6 +47,7 @@ impl OnboardingView {
         };
 
         if let Ok(conn) = db::open(config.db_path()) {
+            tracing::info!("gui startup: onboarding opened db for preload");
             let _ = db::migrate(&conn);
             if let Ok(projects) = db::projects(&conn) {
                 let preferred = if projects.iter().any(|p| p.name == config.default_project) {
@@ -71,8 +73,11 @@ impl OnboardingView {
                     }
                 }
             }
+        } else {
+            tracing::warn!("gui startup: onboarding db preload skipped (open failed)");
         }
 
+        tracing::info!("gui startup: onboarding view init done");
         view
     }
 
@@ -212,7 +217,10 @@ impl OnboardingView {
             ui.add(
                 egui::TextEdit::singleline(&mut self.jira_token)
                     .password(self.jira_token_masked)
-                    .margin(egui::Margin::symmetric(style::TEXT_PAD_X, style::TEXT_PAD_Y)),
+                    .margin(egui::Margin::symmetric(
+                        style::TEXT_PAD_X,
+                        style::TEXT_PAD_Y,
+                    )),
             );
             let icon = if self.jira_token_masked {
                 icons::EYE
@@ -288,12 +296,10 @@ impl OnboardingView {
         if !self.jira_sap_field.trim().is_empty() {
             next.jira_sap_field = self.jira_sap_field.trim().to_string();
         }
-        next.jira_token = None;
+        next.jira_token = config.jira_token.clone();
         next.validate().map_err(|e| e.to_string())?;
 
-        if !self.jira_token.trim().is_empty() {
-            secrets::store_jira_token(self.jira_token.trim()).map_err(|e| e.to_string())?;
-        }
+        secrets::persist_jira_token(self.jira_token.trim(), &mut next.jira_token);
 
         let conn = db::open(next.db_path()).map_err(|e| e.to_string())?;
         db::migrate(&conn).map_err(|e| e.to_string())?;
@@ -304,11 +310,25 @@ impl OnboardingView {
             .iter()
             .any(|p| p.name == next.default_project.trim())
         {
-            db::add_project(&conn, next.default_project.trim(), None).map_err(|e| e.to_string())?;
+            db::add_project(
+                &conn,
+                next.default_project.trim(),
+                None,
+                Some(&crate::gui::color::generate_color_for_name(
+                    next.default_project.trim(),
+                )),
+            )
+            .map_err(|e| e.to_string())?;
         }
 
         if !projects.iter().any(|p| p.name == first_name) {
-            db::add_project(&conn, first_name, None).map_err(|e| e.to_string())?;
+            db::add_project(
+                &conn,
+                first_name,
+                None,
+                Some(&crate::gui::color::generate_color_for_name(first_name)),
+            )
+            .map_err(|e| e.to_string())?;
         }
 
         let projects = db::projects(&conn).map_err(|e| e.to_string())?;

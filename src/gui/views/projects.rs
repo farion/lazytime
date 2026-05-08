@@ -24,6 +24,7 @@ struct ProjectForm {
     id: Option<i64>,
     name: String,
     sap: String,
+    color: String,
 }
 
 #[derive(Clone, Default)]
@@ -99,6 +100,10 @@ impl ProjectsView {
                         id: Some(p.id),
                         name: p.name.clone(),
                         sap: p.sap_number.clone().unwrap_or_default(),
+                        color: p
+                            .color
+                            .clone()
+                            .unwrap_or_else(|| crate::gui::color::generate_color_for_name(&p.name)),
                     });
                 }
                 if ui
@@ -113,12 +118,22 @@ impl ProjectsView {
 
         let rows: Vec<Vec<String>> = projects
             .iter()
-            .map(|p| vec![p.name.clone(), p.sap_number.clone().unwrap_or_default()])
+            .map(|p| {
+                let color = p
+                    .color
+                    .clone()
+                    .unwrap_or_else(|| crate::gui::color::generate_color_for_name(&p.name));
+                vec![
+                    p.name.clone(),
+                    color,
+                    p.sap_number.clone().unwrap_or_default(),
+                ]
+            })
             .collect();
         if let Some(action) = table::render_table(
             ui,
             "projects_table",
-            &["Project", "SAP Number"],
+            &["Project", "Color", "SAP Number"],
             &rows,
             Some(self.selected_project),
             Some(table::ContextMenuConfig::default()),
@@ -134,6 +149,9 @@ impl ProjectsView {
                             id: Some(p.id),
                             name: p.name.clone(),
                             sap: p.sap_number.clone().unwrap_or_default(),
+                            color: p.color.clone().unwrap_or_else(|| {
+                                crate::gui::color::generate_color_for_name(&p.name)
+                            }),
                         });
                     }
                 }
@@ -146,9 +164,14 @@ impl ProjectsView {
                 RowAction::Copy(i) => {
                     self.selected_project = i;
                     if let Some(p) = projects.get(i) {
+                        let color = p
+                            .color
+                            .clone()
+                            .unwrap_or_else(|| crate::gui::color::generate_color_for_name(&p.name));
                         ctx.copy_text(format!(
-                            "{} | {}",
+                            "{} | {} | {}",
                             p.name,
+                            color,
                             p.sap_number.clone().unwrap_or_default()
                         ));
                         message = Some("row copied".to_string());
@@ -226,6 +249,35 @@ impl ProjectsView {
                             DIALOG_LABEL_WIDTH,
                             &mut modal.sap,
                         );
+                        if modal.color.trim().is_empty() {
+                            let seed_name = if modal.name.trim().is_empty() {
+                                "Default"
+                            } else {
+                                modal.name.trim()
+                            };
+                            modal.color = crate::gui::color::generate_color_for_name(seed_name);
+                        }
+                        style::setting_row(
+                            ui,
+                            "Color",
+                            "Project color (picker).",
+                            DIALOG_LABEL_WIDTH,
+                            |ui| {
+                                let mut picked = crate::gui::color::color32_from_hex(&modal.color)
+                                    .unwrap_or(egui::Color32::from_rgb(128, 128, 128));
+                                ui.horizontal(|ui| {
+                                    let resp = egui::color_picker::color_edit_button_srgba(
+                                        ui,
+                                        &mut picked,
+                                        egui::color_picker::Alpha::Opaque,
+                                    );
+                                    if resp.changed() {
+                                        modal.color = crate::gui::color::hex_from_color32(picked);
+                                    }
+                                    ui.monospace(modal.color.as_str());
+                                });
+                            },
+                        );
                         ui.separator();
                         ui.horizontal(|ui| {
                             if ui
@@ -240,10 +292,33 @@ impl ProjectsView {
                                     } else {
                                         Some(modal.sap.trim())
                                     };
-                                    let res = if let Some(id) = modal.id {
-                                        db::update_project(&conn, id, modal.name.trim(), sap)
+                                    let color = if modal.color.trim().is_empty() {
+                                        None
                                     } else {
-                                        db::add_project(&conn, modal.name.trim(), sap)
+                                        Some(modal.color.trim().to_ascii_uppercase())
+                                    };
+                                    if let Some(c) = color.as_deref()
+                                        && crate::gui::color::color32_from_hex(c).is_none()
+                                    {
+                                        message =
+                                            Some("invalid color; expected #RRGGBB".to_string());
+                                        return;
+                                    }
+                                    let res = if let Some(id) = modal.id {
+                                        db::update_project(
+                                            &conn,
+                                            id,
+                                            modal.name.trim(),
+                                            sap,
+                                            color.as_deref(),
+                                        )
+                                    } else {
+                                        db::add_project(
+                                            &conn,
+                                            modal.name.trim(),
+                                            sap,
+                                            color.as_deref(),
+                                        )
                                     };
                                     if let Err(err) = res {
                                         message = Some(format!("error: {err}"));
@@ -656,6 +731,10 @@ impl ProjectsView {
                 id: Some(p.id),
                 name: p.name.clone(),
                 sap: p.sap_number.clone().unwrap_or_default(),
+                color: p
+                    .color
+                    .clone()
+                    .unwrap_or_else(|| crate::gui::color::generate_color_for_name(&p.name)),
             });
         }
         if ctx.input(|i| i.key_pressed(egui::Key::D))

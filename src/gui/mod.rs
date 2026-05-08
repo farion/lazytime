@@ -1,6 +1,8 @@
 #[cfg(feature = "popup-ui")]
 mod app;
 #[cfg(feature = "popup-ui")]
+mod color;
+#[cfg(feature = "popup-ui")]
 mod style;
 #[cfg(feature = "popup-ui")]
 mod table;

@@ -5,7 +5,7 @@ use egui_phosphor_icons::icons;
 
 use crate::config::Config;
 use crate::db;
-use crate::tui::trackings_cleanup::cleanup_today_unsynced_trackings;
+use crate::tui::trackings_cleanup::cleanup_unsynced_trackings_in_range;
 use crate::tui::trackings_rows::{DisplayRow, display_rows, extract_date};
 use crate::tui::trackings_storno::storno_tracking;
 
@@ -123,7 +123,8 @@ impl TrackingsView {
                         "Cleanup. Merge multiple following trackings for the same project.",
                     )
                     .clicked()
-                    && let Ok(stats) = cleanup_today_unsynced_trackings(&conn, config)
+                    && let Ok(stats) =
+                        cleanup_unsynced_trackings_in_range(&conn, &self.filter_start, &self.filter_end)
                 {
                     message = Some(if stats.removed_rows == 0 {
                         "cleanup: nothing to merge".to_string()
@@ -588,7 +589,8 @@ impl TrackingsView {
             self.show_gaps = !self.show_gaps;
         }
         if ctx.input(|i| i.key_pressed(egui::Key::L))
-            && let Ok(stats) = cleanup_today_unsynced_trackings(conn, config)
+            && let Ok(stats) =
+                cleanup_unsynced_trackings_in_range(conn, &self.filter_start, &self.filter_end)
         {
             *message = Some(if stats.removed_rows == 0 {
                 "cleanup: nothing to merge".to_string()
@@ -742,7 +744,11 @@ fn shift_filter_window(filter_start: &mut String, filter_end: &mut String, right
     *filter_end = new_to.format("%Y-%m-%d").to_string();
 }
 
-fn to_table_rows(rows: &[DisplayRow], filter_start: &str, filter_end: &str) -> Vec<Vec<String>> {
+fn to_table_rows(
+    rows: &[DisplayRow],
+    filter_start: &str,
+    filter_end: &str,
+) -> Vec<Vec<String>> {
     let single_day_filter = match (
         NaiveDate::parse_from_str(filter_start.trim(), "%Y-%m-%d"),
         NaiveDate::parse_from_str(filter_end.trim(), "%Y-%m-%d"),

@@ -61,11 +61,7 @@ impl SettingsState {
             report_end: cfg.report_end.clone().unwrap_or_default(),
             db_file: cfg.db_file.clone(),
             jira_url: cfg.jira_url.clone().unwrap_or_default(),
-            jira_token: secrets::load_jira_token()
-                .ok()
-                .flatten()
-                .or_else(|| cfg.jira_token.clone())
-                .unwrap_or_default(),
+            jira_token: cfg.jira_token.clone().unwrap_or_default(),
             jira_token_masked: true,
             jira_email: cfg.jira_email.clone().unwrap_or_default(),
             jira_project: cfg.jira_project.clone().unwrap_or_default(),
@@ -197,12 +193,8 @@ impl SettingsState {
                 return Ok(true);
             }
             KeyCode::Char('s') => {
-                let cfg = self.to_config().map_err(|e| anyhow::anyhow!(e))?;
-                if self.jira_token.trim().is_empty() {
-                    secrets::clear_jira_token()?;
-                } else {
-                    secrets::store_jira_token(self.jira_token.trim())?;
-                }
+                let mut cfg = self.to_config().map_err(|e| anyhow::anyhow!(e))?;
+                secrets::persist_jira_token(self.jira_token.trim(), &mut cfg.jira_token);
                 let p = resolve_config_path(config_path);
                 if let Some(parent) = p.parent() {
                     fs::create_dir_all(parent)?;

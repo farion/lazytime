@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
@@ -19,6 +19,7 @@ pub struct Project {
     pub id: i64,
     pub name: String,
     pub sap_number: Option<String>,
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -186,6 +187,23 @@ COMMIT;
 "#,
         )?;
 
+        conn.execute(
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (?1, ?2)",
+            params![version, crate::time::format_ts(&Utc::now())],
+        )?;
+    }
+
+    // Migration 004: add optional project color
+    let version = "004_project_color";
+    let exists: Option<i64> = conn
+        .query_row(
+            "SELECT id FROM schema_migrations WHERE version = ?1",
+            params![version],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if exists.is_none() {
+        conn.execute("ALTER TABLE projects ADD COLUMN color TEXT", [])?;
         conn.execute(
             "INSERT INTO schema_migrations (version, applied_at) VALUES (?1, ?2)",
             params![version, crate::time::format_ts(&Utc::now())],
@@ -397,6 +415,12 @@ pub fn add_manual_tracking(
     end_ts: Option<&str>,
     notes: Option<&str>,
 ) -> Result<()> {
+    if let Some(end) = end_ts
+        && let Some(day) = day_key_from_ts(start_ts)
+        && has_overlap_for_day(conn, &day, None, start_ts, end)?
+    {
+        return Err(anyhow!("tracking overlaps existing entry"));
+    }
     if end_ts.is_none() {
         let now = crate::time::format_ts(&Utc::now());
         conn.execute(
@@ -420,6 +444,12 @@ pub fn update_tracking_times(
     end_ts: Option<&str>,
     notes: Option<&str>,
 ) -> Result<()> {
+    if let Some(end) = end_ts
+        && let Some(day) = day_key_from_ts(start_ts)
+        && has_overlap_for_day(conn, &day, Some(tracking_id), start_ts, end)?
+    {
+        return Err(anyhow!("tracking overlaps existing entry"));
+    }
     if end_ts.is_none() {
         let now = crate::time::format_ts(&Utc::now());
         conn.execute(
@@ -527,12 +557,14 @@ pub fn mark_unsynced(conn: &Connection, tracking_id: i64) -> Result<()> {
 }
 
 pub fn projects(conn: &Connection) -> Result<Vec<Project>> {
-    let mut stmt = conn.prepare("SELECT id, name, sap_number FROM projects ORDER BY name")?;
+    let mut stmt =
+        conn.prepare("SELECT id, name, sap_number, color FROM projects ORDER BY name")?;
     let rows = stmt.query_map([], |r| {
         Ok(Project {
             id: r.get(0)?,
             name: r.get(1)?,
             sap_number: r.get(2)?,
+            color: r.get(3)?,
         })
     })?;
     let mut out = Vec::new();
@@ -640,10 +672,15 @@ pub fn report_range(conn: &Connection, start: &str, end: &str) -> Result<Vec<Rep
     Ok(out)
 }
 
-pub fn add_project(conn: &Connection, name: &str, sap_number: Option<&str>) -> Result<()> {
+pub fn add_project(
+    conn: &Connection,
+    name: &str,
+    sap_number: Option<&str>,
+    color: Option<&str>,
+) -> Result<()> {
     conn.execute(
-        "INSERT INTO projects (name, sap_number) VALUES (?1, ?2)",
-        params![name, sap_number],
+        "INSERT INTO projects (name, sap_number, color) VALUES (?1, ?2, ?3)",
+        params![name, sap_number, color],
     )?;
     Ok(())
 }
@@ -653,12 +690,108 @@ pub fn update_project(
     project_id: i64,
     name: &str,
     sap_number: Option<&str>,
+    color: Option<&str>,
 ) -> Result<()> {
     conn.execute(
-        "UPDATE projects SET name = ?1, sap_number = ?2 WHERE id = ?3",
-        params![name, sap_number, project_id],
+        "UPDATE projects SET name = ?1, sap_number = ?2, color = ?3 WHERE id = ?4",
+        params![name, sap_number, color, project_id],
     )?;
     Ok(())
+}
+
+pub fn project_color_by_name(conn: &Connection, project_name: &str) -> Result<Option<String>> {
+    conn.query_row(
+        "SELECT color FROM projects WHERE name = ?1",
+        params![project_name],
+        |r| r.get(0),
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+pub fn list_trackings_for_date(conn: &Connection, date: &str) -> Result<Vec<Tracking>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, project_name, start_ts, end_ts, created_by, jira_synced, notes
+         FROM trackings
+         WHERE date(start_ts) = date(?1)
+         ORDER BY start_ts ASC",
+    )?;
+    let rows = stmt.query_map(params![date], |r| {
+        Ok(Tracking {
+            id: r.get(0)?,
+            project_name: r.get(1)?,
+            start_ts: r.get(2)?,
+            end_ts: r.get(3)?,
+            created_by: r.get(4)?,
+            jira_synced: r.get(5)?,
+            notes: r.get(6).ok(),
+        })
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    Ok(out)
+}
+
+pub fn list_trackings_for_range(conn: &Connection, start_date: &str, end_date: &str) -> Result<Vec<Tracking>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, project_name, start_ts, end_ts, created_by, jira_synced, notes
+         FROM trackings
+         WHERE date(start_ts) >= date(?1) AND date(start_ts) <= date(?2)
+         ORDER BY start_ts ASC",
+    )?;
+    let rows = stmt.query_map(params![start_date, end_date], |r| {
+        Ok(Tracking {
+            id: r.get(0)?,
+            project_name: r.get(1)?,
+            start_ts: r.get(2)?,
+            end_ts: r.get(3)?,
+            created_by: r.get(4)?,
+            jira_synced: r.get(5)?,
+            notes: r.get(6).ok(),
+        })
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    Ok(out)
+}
+
+pub fn has_overlap_for_day(
+    conn: &Connection,
+    day: &str,
+    exclude_tracking_id: Option<i64>,
+    candidate_start_ts: &str,
+    candidate_end_ts: &str,
+) -> Result<bool> {
+    let overlap: Option<i64> = conn
+        .query_row(
+            "SELECT id FROM trackings
+             WHERE date(start_ts) = date(?1)
+               AND (?2 IS NULL OR id <> ?2)
+               AND ?3 < COALESCE(end_ts, start_ts)
+               AND start_ts < ?4
+             LIMIT 1",
+            params![
+                day,
+                exclude_tracking_id,
+                candidate_start_ts,
+                candidate_end_ts
+            ],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(overlap.is_some())
+}
+
+fn day_key_from_ts(ts: &str) -> Option<String> {
+    crate::time::parse_ts(ts).ok().map(|dt| {
+        dt.with_timezone(&chrono::Local)
+            .format("%Y-%m-%d")
+            .to_string()
+    })
 }
 
 pub fn delete_project(conn: &Connection, project_id: i64) -> Result<()> {
