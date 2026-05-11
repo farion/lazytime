@@ -157,8 +157,14 @@ jobs:
             -HashAlgorithm SHA256 | Out-Null
 
           $signature = Get-AuthenticodeSignature target\release\lazytime.exe
+          $isTrustWarning = $signature.Status -eq 'UnknownError' -and $signature.StatusMessage -match 'not trusted by the trust provider'
+          $hasExpectedSigner = $null -ne $signature.SignerCertificate -and $signature.SignerCertificate.Subject -match 'CN=LazyTime Self Signed'
 
-          if ($signature.Status -notin @('Valid', 'NotTrusted')) {
+          if (-not $hasExpectedSigner) {
+            throw "code signing failed: expected signer certificate not present"
+          }
+
+          if ($signature.Status -notin @('Valid', 'NotTrusted') -and -not $isTrustWarning) {
             throw "code signing failed with status: $($signature.Status); message: $($signature.StatusMessage)"
           }
 
