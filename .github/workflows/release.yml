@@ -219,6 +219,7 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
+          P12_PASSWORD="lazytime-build"
 
           mkdir -p .build/certs
           cat > .build/certs/openssl-codesign.cnf <<'EOF'
@@ -246,6 +247,7 @@ jobs:
             -config .build/certs/openssl-codesign.cnf
 
           openssl pkcs12 -export \
+            -legacy \
             -inkey .build/certs/lazytime-sign.key \
             -in .build/certs/lazytime-sign.crt \
             -out .build/certs/lazytime-sign.p12 \
