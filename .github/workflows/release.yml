@@ -56,6 +56,7 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
+          P12_PASSWORD="lazytime-build"
           VERSION="$VERSION" python3 - <<'PY'
           import os
           import pathlib
@@ -146,18 +147,22 @@ jobs:
             -CertStoreLocation "Cert:\CurrentUser\My" `
             -KeyAlgorithm RSA `
             -KeyLength 2048 `
-            -HashAlgorithm SHA256
+            -HashAlgorithm SHA256 `
+            -Provider "Microsoft Enhanced RSA and AES Cryptographic Provider" `
+            -KeySpec Signature
 
-          $signature = Set-AuthenticodeSignature `
+          Set-AuthenticodeSignature `
             -FilePath target\release\lazytime.exe `
             -Certificate $cert `
-            -HashAlgorithm SHA256
+            -HashAlgorithm SHA256 | Out-Null
+
+          $signature = Get-AuthenticodeSignature target\release\lazytime.exe
 
           if ($signature.Status -notin @('Valid', 'NotTrusted')) {
-            throw "code signing failed with status: $($signature.Status)"
+            throw "code signing failed with status: $($signature.Status); message: $($signature.StatusMessage)"
           }
 
-          Get-AuthenticodeSignature target\release\lazytime.exe | Format-List Status, StatusMessage, SignerCertificate
+          $signature | Format-List Status, StatusMessage, SignerCertificate
 
       - name: Package (zip)
         shell: powershell
@@ -244,11 +249,11 @@ jobs:
             -inkey .build/certs/lazytime-sign.key \
             -in .build/certs/lazytime-sign.crt \
             -out .build/certs/lazytime-sign.p12 \
-            -passout pass:
+            -passout "pass:${P12_PASSWORD}"
 
           security create-keychain -p "" lazytime-build.keychain
           security unlock-keychain -p "" lazytime-build.keychain
-          security import .build/certs/lazytime-sign.p12 -k lazytime-build.keychain -P "" -T /usr/bin/codesign
+          security import .build/certs/lazytime-sign.p12 -k lazytime-build.keychain -P "${P12_PASSWORD}" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "" lazytime-build.keychain
           security list-keychains -s lazytime-build.keychain login.keychain
 
