@@ -247,7 +247,6 @@ jobs:
             -config .build/certs/openssl-codesign.cnf
 
           openssl pkcs12 -export \
-            -legacy \
             -inkey .build/certs/lazytime-sign.key \
             -in .build/certs/lazytime-sign.crt \
             -out .build/certs/lazytime-sign.p12 \
